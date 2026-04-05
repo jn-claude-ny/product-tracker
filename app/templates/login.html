@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Login to Product Tracker - Monitor and track product prices">
+    <meta name="keywords" content="product tracker, price monitoring, login">
+    <title>Login - Product Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/alpinejs@3.13.3/dist/cdn.min.js" defer></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        
+        .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .gradient-text { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); background-clip: text; -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        
+        @keyframes float { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-20px); } }
+        .animate-float { animation: float 6s ease-in-out infinite; }
+        
+        @keyframes slideIn { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-slide-in { animation: slideIn 0.6s ease-out; }
+        
+        .glass-effect { backdrop-filter: blur(20px); background: rgba(255, 255, 255, 0.9); }
+        
+        .dark { background: #0f172a; }
+        .dark .glass-effect { background: rgba(30, 41, 59, 0.9); }
+        .dark .text-gray-900 { color: #f1f5f9; }
+        .dark .text-gray-600 { color: #94a3b8; }
+        .dark .bg-white { background: #1e293b; }
+        .dark .border-gray-300 { border-color: #475569; }
+    </style>
+</head>
+<body class="min-h-screen relative overflow-hidden transition-colors duration-300" :class="darkMode ? 'dark bg-slate-900' : 'bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50'" x-data="loginForm()">
+    
+    <!-- Animated Background Elements -->
+    <div class="absolute inset-0 overflow-hidden pointer-events-none">
+        <div class="absolute top-20 left-10 w-72 h-72 bg-purple-300 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-float"></div>
+        <div class="absolute top-40 right-10 w-72 h-72 bg-indigo-300 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-float" style="animation-delay: 2s;"></div>
+        <div class="absolute -bottom-8 left-1/2 w-72 h-72 bg-pink-300 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-float" style="animation-delay: 4s;"></div>
+    </div>
+
+    <!-- Dark Mode Toggle -->
+    <button @click="darkMode = !darkMode; localStorage.setItem('darkMode', darkMode)" 
+            class="fixed top-6 right-6 p-3 rounded-full shadow-lg z-50 transition-all duration-200 hover:scale-110"
+            :class="darkMode ? 'bg-slate-800 text-yellow-400' : 'bg-white text-gray-700'">
+        <svg x-show="!darkMode" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+        </svg>
+        <svg x-show="darkMode" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+        </svg>
+    </button>
+
+    <div class="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative z-10">
+        <div class="max-w-md w-full space-y-8 animate-slide-in">
+            
+            <!-- Logo & Title -->
+            <div class="text-center">
+                <div class="flex justify-center mb-6">
+                    <div class="p-4 rounded-2xl gradient-bg shadow-2xl transform hover:scale-110 transition-transform duration-300">
+                        <svg class="w-16 h-16 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                        </svg>
+                    </div>
+                </div>
+                <h2 class="text-5xl font-extrabold gradient-text mb-2">
+                    Product Tracker
+                </h2>
+                <p class="text-lg" :class="darkMode ? 'text-gray-400' : 'text-gray-600'">
+                    Welcome back! Sign in to continue
+                </p>
+            </div>
+
+            <!-- Login Form -->
+            <div class="glass-effect rounded-2xl shadow-2xl p-8 border border-white border-opacity-20">
+                <div class="space-y-6">
+                    
+                    <!-- Email Input -->
+                    <div>
+                        <label class="block text-sm font-semibold mb-2" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">
+                            <span class="flex items-center">
+                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207"/>
+                                </svg>
+                                Email Address
+                            </span>
+                        </label>
+                        <input x-model="email" type="email" required
+                               class="w-full px-4 py-3 rounded-xl border-2 transition-all duration-200 focus:ring-4 focus:ring-purple-300 focus:border-purple-500"
+                               :class="darkMode ? 'bg-slate-800 border-slate-600 text-white placeholder-gray-400' : 'bg-white border-gray-300 text-gray-900'"
+                               placeholder="you@example.com">
+                    </div>
+
+                    <!-- Password Input -->
+                    <div>
+                        <label class="block text-sm font-semibold mb-2" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">
+                            <span class="flex items-center">
+                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                                </svg>
+                                Password
+                            </span>
+                        </label>
+                        <input x-model="password" type="password" required
+                               @keyup.enter="login()"
+                               class="w-full px-4 py-3 rounded-xl border-2 transition-all duration-200 focus:ring-4 focus:ring-purple-300 focus:border-purple-500"
+                               :class="darkMode ? 'bg-slate-800 border-slate-600 text-white placeholder-gray-400' : 'bg-white border-gray-300 text-gray-900'"
+                               placeholder="••••••••">
+                    </div>
+
+                    <!-- Error Message -->
+                    <div x-show="error" x-transition class="rounded-xl bg-red-50 dark:bg-red-900 dark:bg-opacity-30 border-2 border-red-200 dark:border-red-800 p-4">
+                        <div class="flex items-center">
+                            <svg class="w-5 h-5 text-red-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            <p class="text-sm font-medium text-red-800 dark:text-red-300" x-text="error"></p>
+                        </div>
+                    </div>
+
+                    <!-- Login Button -->
+                    <button @click="login()" type="button"
+                            class="w-full gradient-bg text-white font-bold py-4 px-6 rounded-xl shadow-lg hover:shadow-2xl transform hover:scale-105 transition-all duration-200 flex items-center justify-center space-x-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/>
+                        </svg>
+                        <span>Sign In</span>
+                    </button>
+
+                    <!-- Register Link -->
+                    <div class="text-center pt-4">
+                        <a href="{{ url_for('auth.register') }}" class="font-semibold gradient-text hover:underline text-lg">
+                            Don't have an account? Create one →
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Features -->
+            <div class="grid grid-cols-3 gap-4 mt-8">
+                <div class="text-center">
+                    <div class="text-3xl mb-2">🚀</div>
+                    <p class="text-xs font-medium" :class="darkMode ? 'text-gray-400' : 'text-gray-600'">Fast Tracking</p>
+                </div>
+                <div class="text-center">
+                    <div class="text-3xl mb-2">📊</div>
+                    <p class="text-xs font-medium" :class="darkMode ? 'text-gray-400' : 'text-gray-600'">Real-time Data</p>
+                </div>
+                <div class="text-center">
+                    <div class="text-3xl mb-2">🔔</div>
+                    <p class="text-xs font-medium" :class="darkMode ? 'text-gray-400' : 'text-gray-600'">Smart Alerts</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function loginForm() {
+            return {
+                email: '',
+                password: '',
+                error: '',
+                darkMode: localStorage.getItem('darkMode') === 'true',
+                async login() {
+                    this.error = '';
+                    try {
+                        const response = await fetch('/api/auth/login', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                email: this.email,
+                                password: this.password
+                            })
+                        });
+
+                        const data = await response.json();
+
+                        if (response.ok) {
+                            localStorage.setItem('access_token', data.access_token);
+                            localStorage.setItem('refresh_token', data.refresh_token);
+                            
+                            // Success animation
+                            const notification = document.createElement('div');
+                            notification.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-xl shadow-lg z-50 animate-slide-in';
+                            notification.textContent = '✅ Login successful! Redirecting...';
+                            document.body.appendChild(notification);
+                            
+                            setTimeout(() => {
+                                window.location.href = '/dashboard';
+                            }, 1000);
+                        } else {
+                            this.error = data.error || 'Invalid email or password';
+                        }
+                    } catch (e) {
+                        this.error = 'Network error. Please try again.';
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,614 @@
+{% extends "base.html" %}
+
+{% block title %}Products - Product Tracker{% endblock title %}
+
+{% block content %}
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+    body { font-family: 'Inter', sans-serif; }
+    .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    .animate-fade-in { animation: fadeIn 0.4s ease-out; }
+    .product-card { transition: all 0.3s ease; }
+    .product-card:hover { transform: translateY(-4px); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); }
+    
+    .dark { background-color: #0f172a; color: #e2e8f0; }
+    .dark .bg-white { background-color: #1e293b; }
+    .dark .text-gray-900 { color: #f1f5f9; }
+    .dark .text-gray-700 { color: #cbd5e1; }
+    .dark .text-gray-500 { color: #94a3b8; }
+    .dark .border-gray-200 { border-color: #334155; }
+    .dark .bg-gray-50 { background-color: #1e293b; }
+</style>
+
+<div x-data="products()" x-init="init()" :class="darkMode ? 'dark' : ''">
+    <div class="min-h-screen transition-colors duration-300" :class="darkMode ? 'bg-slate-900' : 'bg-gray-50'">
+        <div class="px-4 py-8 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+            
+            <!-- Header -->
+            <div class="flex justify-between items-center mb-8 animate-fade-in">
+                <div>
+                    <h1 class="text-4xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                        Products
+                    </h1>
+                    <p class="mt-2 text-gray-600 dark:text-gray-400">Browse and track products across all websites</p>
+                </div>
+                <button @click="darkMode = !darkMode; localStorage.setItem('darkMode', darkMode)" 
+                        class="p-2 rounded-lg transition-colors duration-200"
+                        :class="darkMode ? 'bg-slate-800 text-yellow-400' : 'bg-white text-gray-600'">
+                    <svg x-show="!darkMode" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+                    </svg>
+                    <svg x-show="darkMode" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Search & Filters -->
+            <div class="mb-6 space-y-4 animate-fade-in">
+                <div class="flex flex-col lg:flex-row gap-4">
+                    <!-- Search Bar -->
+                    <div class="flex-1 relative">
+                        <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                            <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                            </svg>
+                        </div>
+                        <input x-model="searchQuery" @input="onSearchInput()" type="text" 
+                               placeholder="Search products..." 
+                               class="w-full pl-12 pr-4 py-3 rounded-xl border-2 transition-all"
+                               :class="darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-gray-300 text-gray-900'">
+                    </div>
+                    
+                    <!-- Website Filter -->
+                    <select x-model="websiteFilter" @change="applyFilters()"
+                            class="px-4 py-3 rounded-xl border-2 transition-all"
+                            :class="darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-gray-300 text-gray-900'">
+                        <option value="">All Websites</option>
+                        <template x-for="site in websites" :key="site.id">
+                            <option :value="site.id" x-text="site.name"></option>
+                        </template>
+                    </select>
+
+                    <!-- Gender Filter -->
+                    <select x-model="genderFilter" @change="applyFilters()"
+                            class="px-4 py-3 rounded-xl border-2 transition-all"
+                            :class="darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-gray-300 text-gray-900'">
+                        <option value="">All Genders</option>
+                        <option value="men">Men</option>
+                        <option value="women">Women</option>
+                        <option value="unisex">Unisex</option>
+                    </select>
+
+                    <!-- Availability Filter -->
+                    <select x-model="availabilityFilter" @change="applyFilters()"
+                            class="px-4 py-3 rounded-xl border-2 transition-all"
+                            :class="darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-gray-300 text-gray-900'">
+                        <option value="">All Stock</option>
+                        <option value="InStock">In Stock</option>
+                        <option value="OutOfStock">Out of Stock</option>
+                        <option value="LowStock">Low Stock</option>
+                    </select>
+
+                    <!-- Sort -->
+                    <select x-model="sortBy" @change="applyFilters()" 
+                            class="px-4 py-3 rounded-xl border-2 transition-all"
+                            :class="darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-gray-300 text-gray-900'">
+                        <option value="updated_desc">Recently Updated</option>
+                        <option value="price_asc">Price: Low to High</option>
+                        <option value="price_desc">Price: High to Low</option>
+                        <option value="title_asc">Title: A-Z</option>
+                    </select>
+                </div>
+
+                <!-- Additional Filters -->
+                <div class="flex flex-wrap gap-2">
+                    <button @click="toggleFilter('is_new')" 
+                            class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                            :class="activeFilters.includes('is_new') ? 'bg-green-500 text-white' : (darkMode ? 'bg-slate-800 text-gray-300' : 'bg-white text-gray-700')">
+                        🆕 New Arrivals
+                    </button>
+                    <button @click="toggleFilter('is_on_sale')" 
+                            class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                            :class="activeFilters.includes('is_on_sale') ? 'bg-red-500 text-white' : (darkMode ? 'bg-slate-800 text-gray-300' : 'bg-white text-gray-700')">
+                        🔥 On Sale
+                    </button>
+                    <button @click="clearFilters()" 
+                            x-show="hasActiveFilters()"
+                            class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                            :class="darkMode ? 'bg-slate-700 text-gray-300' : 'bg-gray-200 text-gray-700'">
+                        Clear Filters
+                    </button>
+                </div>
+            </div>
+
+            <!-- Results Count -->
+            <div class="mb-4 text-sm text-gray-600 dark:text-gray-400">
+                Showing <span class="font-semibold" x-text="filteredProducts.length"></span> of <span class="font-semibold" x-text="totalProducts"></span> products
+                <span class="ml-2" x-show="totalPages > 1">(Page <span class="font-semibold" x-text="currentPage"></span> / <span class="font-semibold" x-text="totalPages"></span>)</span>
+            </div>
+
+            <div x-show="isLoading" class="mb-4 text-sm text-gray-600 dark:text-gray-400">Loading products...</div>
+
+            <!-- Products Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                <template x-for="product in filteredProducts" :key="product.id">
+                    <div class="product-card bg-white dark:bg-slate-800 rounded-2xl shadow-lg overflow-hidden border border-gray-200 dark:border-gray-700">
+                        <!-- Product Image -->
+                        <div class="relative h-48 bg-gray-100 dark:bg-slate-700">
+                            <img :src="product.image || '/static/images/placeholder.png'" 
+                                 :alt="product.title" 
+                                 class="w-full h-full object-cover">
+                            
+                            <!-- Badges -->
+                            <div class="absolute top-2 left-2 flex flex-col gap-1">
+                                <span x-show="product.is_new" class="px-2 py-1 bg-green-500 text-white text-xs font-bold rounded">NEW</span>
+                                <span x-show="product.is_on_sale" class="px-2 py-1 bg-red-500 text-white text-xs font-bold rounded">SALE</span>
+                            </div>
+                            
+                            <!-- Gender Badge -->
+                            <div class="absolute top-2 right-2">
+                                <span x-show="product.gender" 
+                                      class="px-2 py-1 text-xs font-medium rounded"
+                                      :class="{
+                                          'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200': product.gender === 'men',
+                                          'bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-200': product.gender === 'women',
+                                          'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200': product.gender === 'unisex'
+                                      }"
+                                      x-text="product.gender?.toUpperCase()"></span>
+                            </div>
+                            
+                            <!-- Quick Track Button -->
+                            <button @click="quickTrack(product)" 
+                                    class="absolute bottom-2 right-2 p-2 bg-white dark:bg-slate-800 rounded-full shadow-lg hover:scale-110 transition-transform">
+                                <svg class="w-5 h-5 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/>
+                                </svg>
+                            </button>
+                        </div>
+                        
+                        <!-- Product Info -->
+                        <div class="p-4">
+                            <h3 class="font-semibold text-gray-900 dark:text-white mb-1 line-clamp-2" x-text="product.title"></h3>
+                            <p class="text-sm text-gray-600 dark:text-gray-400 mb-2" x-text="product.brand"></p>
+                            
+                            <!-- Price -->
+                            <div class="flex items-center gap-2 mb-3">
+                                <span class="text-lg font-bold text-gray-900 dark:text-white" x-text="'$' + (product.price_current || '0.00')"></span>
+                                <span x-show="product.sale_price" 
+                                      class="text-sm text-gray-500 dark:text-gray-400 line-through" 
+                                      x-text="'$' + product.sale_price"></span>
+                            </div>
+                            
+                            <!-- Availability -->
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs px-2 py-1 rounded-full"
+                                      :class="{
+                                          'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200': product.availability === 'InStock',
+                                          'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200': product.availability === 'OutOfStock',
+                                          'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200': product.availability === 'LowStock'
+                                      }"
+                                      x-text="product.availability || 'Unknown'"></span>
+                                
+                                <button @click="openTrackingModal(product)" 
+                                        class="text-sm text-indigo-600 dark:text-indigo-400 hover:underline font-medium">
+                                    Track
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <!-- Pagination Controls -->
+            <div class="mt-8 flex items-center justify-between" x-show="totalPages > 1">
+                <button @click="goToPage(currentPage - 1)"
+                        :disabled="currentPage <= 1 || isLoading"
+                        class="px-4 py-2 rounded-lg border text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        :class="darkMode ? 'border-slate-600 text-gray-300 hover:bg-slate-800' : 'border-gray-300 text-gray-700 hover:bg-gray-100'">
+                    Previous
+                </button>
+
+                <div class="text-sm text-gray-600 dark:text-gray-400">
+                    Page <span class="font-semibold" x-text="currentPage"></span> of <span class="font-semibold" x-text="totalPages"></span>
+                </div>
+
+                <button @click="goToPage(currentPage + 1)"
+                        :disabled="currentPage >= totalPages || isLoading"
+                        class="px-4 py-2 rounded-lg border text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        :class="darkMode ? 'border-slate-600 text-gray-300 hover:bg-slate-800' : 'border-gray-300 text-gray-700 hover:bg-gray-100'">
+                    Next
+                </button>
+            </div>
+
+            <!-- Empty State -->
+            <div x-show="!isLoading && filteredProducts.length === 0" class="text-center py-16">
+                <svg class="mx-auto h-16 w-16 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
+                </svg>
+                <h3 class="mt-4 text-lg font-semibold text-gray-900 dark:text-white">No products found</h3>
+                <p class="mt-2 text-gray-600 dark:text-gray-400">Try adjusting your filters</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Advanced Tracking Modal -->
+    <div x-show="showTrackingModal" class="fixed z-50 inset-0 overflow-y-auto" style="display: none;">
+        <div class="flex items-center justify-center min-h-screen px-4 py-8">
+            <div class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm" @click="showTrackingModal = false"></div>
+            <div class="relative rounded-2xl overflow-hidden shadow-2xl transform transition-all max-w-2xl w-full z-20"
+                 :class="darkMode ? 'bg-slate-800' : 'bg-white'">
+                <div class="gradient-bg p-6">
+                    <h3 class="text-2xl font-bold text-white">Track Product</h3>
+                    <p class="text-indigo-100 text-sm mt-1" x-text="trackingProduct?.title"></p>
+                </div>
+                
+                <div class="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+                    <!-- Tracking Filters -->
+                    <div>
+                        <h4 class="text-lg font-semibold mb-4" :class="darkMode ? 'text-white' : 'text-gray-900'">
+                            Tracking Conditions
+                        </h4>
+                        
+                        <!-- Gender -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium mb-2" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">
+                                Gender
+                            </label>
+                            <select x-model="trackingFilters.gender" 
+                                    class="w-full px-4 py-2 rounded-lg border"
+                                    :class="darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-300 text-gray-900'">
+                                <option value="">Any</option>
+                                <option value="men">Men</option>
+                                <option value="women">Women</option>
+                                <option value="unisex">Unisex</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Size -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium mb-2" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">
+                                Size
+                            </label>
+                            <input x-model="trackingFilters.size" 
+                                   type="text" 
+                                   placeholder="e.g., 9, 10.5, M, L"
+                                   class="w-full px-4 py-2 rounded-lg border"
+                                   :class="darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-300 text-gray-900'">
+                        </div>
+                        
+                        <!-- Color -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium mb-2" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">
+                                Color
+                            </label>
+                            <input x-model="trackingFilters.color" 
+                                   type="text" 
+                                   placeholder="e.g., Black, White, Red"
+                                   class="w-full px-4 py-2 rounded-lg border"
+                                   :class="darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-300 text-gray-900'">
+                        </div>
+                        
+                        <!-- Price Range -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium mb-2" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">
+                                Price Range
+                            </label>
+                            <div class="grid grid-cols-2 gap-4">
+                                <input x-model="trackingFilters.minPrice" 
+                                       type="number" 
+                                       placeholder="Min"
+                                       class="px-4 py-2 rounded-lg border"
+                                       :class="darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-300 text-gray-900'">
+                                <input x-model="trackingFilters.maxPrice" 
+                                       type="number" 
+                                       placeholder="Max"
+                                       class="px-4 py-2 rounded-lg border"
+                                       :class="darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-300 text-gray-900'">
+                            </div>
+                        </div>
+                        
+                        <!-- Availability -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium mb-2" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">
+                                Availability
+                            </label>
+                            <select x-model="trackingFilters.availability" 
+                                    class="w-full px-4 py-2 rounded-lg border"
+                                    :class="darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-300 text-gray-900'">
+                                <option value="">Any</option>
+                                <option value="InStock">In Stock Only</option>
+                                <option value="OutOfStock">Out of Stock Only</option>
+                                <option value="LowStock">Low Stock Only</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Variant Tracking -->
+                        <div class="mb-4">
+                            <label class="flex items-center">
+                                <input x-model="trackingFilters.trackVariants" 
+                                       type="checkbox" 
+                                       class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                                <span class="ml-2 text-sm" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">
+                                    Track all variants (sizes/colors)
+                                </span>
+                            </label>
+                        </div>
+                        
+                        <!-- Priority -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium mb-2" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">
+                                Priority
+                            </label>
+                            <select x-model="trackingFilters.priority" 
+                                    class="w-full px-4 py-2 rounded-lg border"
+                                    :class="darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-300 text-gray-900'">
+                                <option value="normal">Normal</option>
+                                <option value="moderate">Moderate</option>
+                                <option value="high">High</option>
+                                <option value="urgent">Urgent</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="px-6 py-4 flex justify-end space-x-3" :class="darkMode ? 'bg-slate-900' : 'bg-gray-50'">
+                    <button @click="showTrackingModal = false"
+                            class="px-6 py-2 rounded-lg font-medium transition-colors"
+                            :class="darkMode ? 'bg-slate-700 text-gray-300 hover:bg-slate-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'">
+                        Cancel
+                    </button>
+                    <button @click="saveTracking()"
+                            class="bg-indigo-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-indigo-700 transition-colors">
+                        Start Tracking
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function products() {
+        return {
+            allProducts: [],
+            filteredProducts: [],
+            websites: [],
+            darkMode: localStorage.getItem('darkMode') === 'true',
+            searchQuery: '',
+            websiteFilter: '',
+            genderFilter: '',
+            availabilityFilter: '',
+            sortBy: 'updated_desc',
+            activeFilters: [],
+            currentPage: 1,
+            totalPages: 1,
+            totalProducts: 0,
+            perPage: 48,
+            isLoading: false,
+            searchDebounceTimer: null,
+            showTrackingModal: false,
+            trackingProduct: null,
+            trackingFilters: {
+                gender: '',
+                size: '',
+                color: '',
+                minPrice: '',
+                maxPrice: '',
+                availability: '',
+                trackVariants: false,
+                priority: 'normal'
+            },
+            
+            async init() {
+                const token = localStorage.getItem('access_token');
+                if (!token) {
+                    window.location.href = '/login';
+                    return;
+                }
+                
+                await this.loadWebsites();
+                await this.loadProducts();
+            },
+            
+            async loadWebsites() {
+                const token = localStorage.getItem('access_token');
+                try {
+                    const response = await fetch('/api/websites', {
+                        headers: { 'Authorization': 'Bearer ' + token }
+                    });
+                    if (response.ok) {
+                        this.websites = await response.json();
+                    }
+                } catch (error) {
+                    console.error('Failed to load websites:', error);
+                }
+            },
+            
+            async loadProducts() {
+                const token = localStorage.getItem('access_token');
+                try {
+                    this.isLoading = true;
+
+                    let sortBy = 'updated_at';
+                    let sortOrder = 'desc';
+                    if (this.sortBy === 'price_asc') {
+                        sortBy = 'price_current';
+                        sortOrder = 'asc';
+                    } else if (this.sortBy === 'price_desc') {
+                        sortBy = 'price_current';
+                        sortOrder = 'desc';
+                    } else if (this.sortBy === 'title_asc') {
+                        sortBy = 'title';
+                        sortOrder = 'asc';
+                    }
+
+                    const params = new URLSearchParams({
+                        page: String(this.currentPage),
+                        per_page: String(this.perPage),
+                        sort_by: sortBy,
+                        sort_order: sortOrder
+                    });
+
+                    if (this.searchQuery) params.set('search', this.searchQuery);
+                    if (this.websiteFilter) params.set('website_id', this.websiteFilter);
+                    if (this.genderFilter) params.set('gender', this.genderFilter);
+                    if (this.activeFilters.includes('is_new')) params.set('is_new', 'true');
+                    if (this.activeFilters.includes('is_on_sale')) params.set('is_on_sale', 'true');
+
+                    const response = await fetch(`/api/products?${params.toString()}`, {
+                        headers: { 'Authorization': 'Bearer ' + token }
+                    });
+
+                    if (response.status === 401) {
+                        localStorage.removeItem('access_token');
+                        window.location.href = '/login';
+                        return;
+                    }
+
+                    if (!response.ok) {
+                        throw new Error(`Failed to load products: ${response.status}`);
+                    }
+
+                    const data = await response.json();
+                    this.allProducts = data.products || [];
+                    this.totalProducts = data.total || 0;
+                    this.totalPages = data.pages || 1;
+                    this.currentPage = data.page || this.currentPage;
+                    this.filterProducts();
+                } catch (error) {
+                    console.error('Failed to load products:', error);
+                } finally {
+                    this.isLoading = false;
+                }
+            },
+
+            onSearchInput() {
+                if (this.searchDebounceTimer) {
+                    clearTimeout(this.searchDebounceTimer);
+                }
+                this.searchDebounceTimer = setTimeout(() => {
+                    this.applyFilters();
+                }, 300);
+            },
+
+            applyFilters() {
+                if (this.searchDebounceTimer) {
+                    clearTimeout(this.searchDebounceTimer);
+                    this.searchDebounceTimer = null;
+                }
+                this.currentPage = 1;
+                this.loadProducts();
+            },
+
+            goToPage(page) {
+                if (page < 1 || page > this.totalPages || page === this.currentPage || this.isLoading) {
+                    return;
+                }
+                this.currentPage = page;
+                this.loadProducts();
+            },
+            
+            filterProducts() {
+                let filtered = [...this.allProducts];
+
+                if (this.availabilityFilter && filtered.some(p => p.availability !== undefined && p.availability !== null)) {
+                    filtered = filtered.filter(p => p.availability === this.availabilityFilter);
+                }
+                
+                this.filteredProducts = filtered;
+            },
+            
+            toggleFilter(filter) {
+                const index = this.activeFilters.indexOf(filter);
+                if (index > -1) {
+                    this.activeFilters.splice(index, 1);
+                } else {
+                    this.activeFilters.push(filter);
+                }
+                this.applyFilters();
+            },
+            
+            hasActiveFilters() {
+                return this.searchQuery || this.websiteFilter || this.genderFilter || 
+                       this.availabilityFilter || this.activeFilters.length > 0;
+            },
+            
+            clearFilters() {
+                this.searchQuery = '';
+                this.websiteFilter = '';
+                this.genderFilter = '';
+                this.availabilityFilter = '';
+                this.activeFilters = [];
+                this.applyFilters();
+            },
+            
+            quickTrack(product) {
+                // Quick track with default settings
+                this.trackProduct(product, {
+                    priority: 'normal',
+                    trackVariants: false
+                });
+            },
+            
+            openTrackingModal(product) {
+                this.trackingProduct = product;
+                this.trackingFilters = {
+                    gender: product.gender || '',
+                    size: '',
+                    color: product.color || '',
+                    minPrice: '',
+                    maxPrice: '',
+                    availability: '',
+                    trackVariants: false,
+                    priority: 'normal'
+                };
+                this.showTrackingModal = true;
+            },
+            
+            async saveTracking() {
+                await this.trackProduct(this.trackingProduct, this.trackingFilters);
+                this.showTrackingModal = false;
+            },
+            
+            async trackProduct(product, filters) {
+                const token = localStorage.getItem('access_token');
+                try {
+                    const response = await fetch('/api/tracked-products', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': 'Bearer ' + token,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            product_id: product.id,
+                            filters: filters
+                        })
+                    });
+                    
+                    if (response.ok) {
+                        this.showNotification('✅ Product tracking started!', 'success');
+                    } else {
+                        this.showNotification('❌ Failed to track product', 'error');
+                    }
+                } catch (error) {
+                    this.showNotification('❌ Failed to track product', error.message || 'Unknown error');
+                }
+            },
+            
+            showNotification(message, type = 'success') {
+                const colors = {
+                    success: 'bg-green-500',
+                    error: 'bg-red-500'
+                };
+                const notification = document.createElement('div');
+                notification.className = `fixed top-4 right-4 ${colors[type]} text-white px-6 py-3 rounded-lg shadow-lg z-50`;
+                notification.textContent = message;
+                document.body.appendChild(notification);
+                setTimeout(() => notification.remove(), 3000);
+            }
+        }
+    }
+</script>
+{% endblock %}

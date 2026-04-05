@@ -1,0 +1,855 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Product Tracker{% endblock title %}
+
+{% block content %}
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+    body { font-family: 'Inter', sans-serif; }
+    
+    /* Tooltip System */
+    .tooltip-container { position: relative; display: inline-block; }
+    .tooltip-text {
+        visibility: hidden;
+        position: absolute;
+        z-index: 100;
+        background: rgba(15, 23, 42, 0.95);
+        color: white;
+        text-align: center;
+        padding: 8px 12px;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 500;
+        white-space: nowrap;
+        bottom: 125%;
+        left: 50%;
+        transform: translateX(-50%);
+        opacity: 0;
+        transition: opacity 0.3s, visibility 0.3s;
+        backdrop-filter: blur(10px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+    .tooltip-text::after {
+        content: "";
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        margin-left: -5px;
+        border-width: 5px;
+        border-style: solid;
+        border-color: rgba(15, 23, 42, 0.95) transparent transparent transparent;
+    }
+    .tooltip-container:hover .tooltip-text {
+        visibility: visible;
+        opacity: 1;
+    }
+    .dark .tooltip-text {
+        background: rgba(241, 245, 249, 0.95);
+        color: #0f172a;
+    }
+    .dark .tooltip-text::after {
+        border-color: rgba(241, 245, 249, 0.95) transparent transparent transparent;
+    }
+    
+    .dark { background-color: #0f172a; color: #e2e8f0; }
+    .dark .bg-white { background-color: #1e293b; }
+    .dark .text-gray-900 { color: #f1f5f9; }
+    .dark .text-gray-700 { color: #cbd5e1; }
+    .dark .text-gray-500 { color: #94a3b8; }
+    .dark .text-gray-600 { color: #94a3b8; }
+    .dark .border-gray-200 { border-color: #334155; }
+    .dark .border-gray-300 { border-color: #475569; }
+    .dark .bg-gray-50 { background-color: #1e293b; }
+    .dark .bg-gray-100 { background-color: #334155; }
+    
+    @keyframes pulse-slow { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .animate-pulse-slow { animation: pulse-slow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+    
+    @keyframes slideIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    .animate-slide-in { animation: slideIn 0.5s ease-out; }
+    
+    @keyframes spin-slow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .animate-spin-slow { animation: spin-slow 3s linear infinite; }
+
+    @keyframes progress-indeterminate {
+        0%   { transform: translateX(-100%) scaleX(0.3); }
+        40%  { transform: translateX(0%)    scaleX(0.6); }
+        100% { transform: translateX(300%)  scaleX(0.3); }
+    }
+    .animate-progress { animation: progress-indeterminate 1.6s ease-in-out infinite; transform-origin: left; }
+    
+    .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+    .gradient-success { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
+    .gradient-warning { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); }
+    .gradient-danger { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); }
+    
+    .glass-effect { backdrop-filter: blur(10px); background-color: rgba(255, 255, 255, 0.8); }
+    .dark .glass-effect { background-color: rgba(30, 41, 59, 0.8); }
+    
+    .card-hover { transition: all 0.3s ease; }
+    .card-hover:hover { transform: translateY(-4px); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); }
+</style>
+
+<div x-data="dashboard()" x-init="init()" :class="darkMode ? 'dark' : ''">
+    <div class="min-h-screen transition-colors duration-300" :class="darkMode ? 'bg-slate-900' : 'bg-gray-50'">
+        <div class="px-4 py-8 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+            
+            <!-- Header with Dark Mode Toggle -->
+            <div class="flex justify-between items-center mb-8 animate-slide-in">
+                <div>
+                    <h1 class="text-4xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                        Product Tracker Dashboard
+                    </h1>
+                    <p class="mt-2 text-gray-600 dark:text-gray-400">Monitor and track your products in real-time</p>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <!-- Hamburger (mobile only) -->
+                    <button @click="mobileMenuOpen = true" class="md:hidden p-2 rounded-lg transition-colors duration-200"
+                            :class="darkMode ? 'bg-slate-800 text-gray-300 hover:bg-slate-700' : 'bg-white text-gray-700 hover:bg-gray-100'">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                        </svg>
+                    </button>
+                    <button @click="darkMode = !darkMode; localStorage.setItem('darkMode', darkMode)" 
+                            class="p-2 rounded-lg transition-colors duration-200"
+                            :class="darkMode ? 'bg-slate-800 text-yellow-400 hover:bg-slate-700' : 'bg-white text-gray-700 hover:bg-gray-100'">
+                        <svg x-show="!darkMode" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+                        </svg>
+                        <svg x-show="darkMode" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Mobile Navigation -->
+            <div x-show="mobileMenuOpen" class="md:hidden fixed inset-0 z-40 bg-black bg-opacity-50" @click="mobileMenuOpen = false"></div>
+            <div x-show="mobileMenuOpen" class="md:hidden fixed top-0 left-0 w-64 h-full bg-white dark:bg-slate-800 shadow-lg z-50 transform transition-transform duration-300" :class="mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'">
+                <div class="p-4">
+                    <div class="flex items-center justify-between mb-6">
+                        <h2 class="text-xl font-bold text-gray-900 dark:text-white">Menu</h2>
+                        <button @click="mobileMenuOpen = false" class="p-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+                    <nav class="space-y-2">
+                        <a href="{{ url_for('views.dashboard') }}" class="flex items-center px-4 py-3 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
+                            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+                            </svg>
+                            Dashboard
+                        </a>
+                        <a href="{{ url_for('views.products') }}" class="flex items-center px-4 py-3 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
+                            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
+                            </svg>
+                            Products
+                        </a>
+                        <a href="{{ url_for('views.alerts') }}" class="flex items-center px-4 py-3 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
+                            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
+                            </svg>
+                            Alerts
+                        </a>
+                    </nav>
+                </div>
+            </div>
+
+            <!-- Stats Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                <div class="glass-effect rounded-2xl p-6 shadow-lg card-hover animate-slide-in cursor-pointer hover:opacity-90 transition-opacity" @click="window.location.href='/products'">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Total Products</p>
+                            <p class="text-3xl font-bold mt-2" x-text="totalProducts"></p>
+                        </div>
+                        <div class="p-3 bg-green-100 dark:bg-green-900 rounded-xl">
+                            <svg class="w-8 h-8 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="glass-effect rounded-2xl p-6 shadow-lg card-hover animate-slide-in" style="animation-delay: 0.1s">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Total Websites</p>
+                            <p class="text-3xl font-bold mt-2" x-text="websites.length"></p>
+                        </div>
+                        <div class="p-3 bg-indigo-100 dark:bg-indigo-900 rounded-xl">
+                            <svg class="w-8 h-8 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"/>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="glass-effect rounded-2xl p-6 shadow-lg card-hover animate-slide-in" style="animation-delay: 0.2s">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Active Crawls</p>
+                            <p class="text-3xl font-bold mt-2" x-text="activeCrawls"></p>
+                        </div>
+                        <div class="p-3 bg-yellow-100 dark:bg-yellow-900 rounded-xl">
+                            <!-- Spinning when crawling, static clock when idle -->
+                            <svg x-show="activeCrawls > 0" class="w-8 h-8 text-yellow-600 dark:text-yellow-400 animate-spin-slow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                            </svg>
+                            <svg x-show="activeCrawls === 0" class="w-8 h-8 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="glass-effect rounded-2xl p-6 shadow-lg card-hover animate-slide-in" style="animation-delay: 0.3s">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Last Update</p>
+                            <p class="text-sm font-semibold mt-2" x-text="lastUpdate"></p>
+                        </div>
+                        <div class="p-3 bg-purple-100 dark:bg-purple-900 rounded-xl">
+                            <svg class="w-8 h-8 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Websites Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <template x-for="(website, index) in websites" :key="website.id">
+                    <div class="glass-effect rounded-2xl shadow-xl overflow-hidden card-hover animate-slide-in border border-gray-200 dark:border-gray-700"
+                         :style="'animation-delay: ' + (index * 0.1) + 's'">
+                        
+                        <!-- Card Header with Gradient -->
+                        <div class="gradient-bg p-6 relative overflow-hidden">
+                            <div class="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-white opacity-10 rounded-full"></div>
+                            <div class="absolute bottom-0 left-0 -mb-4 -ml-4 w-32 h-32 bg-white opacity-10 rounded-full"></div>
+                            <div class="relative z-10">
+                                <div class="flex items-start justify-between">
+                                    <div class="flex-1">
+                                        <h3 class="text-xl font-bold text-white mb-1" x-text="website.name"></h3>
+                                        <p class="text-indigo-100 text-sm truncate" x-text="website.base_url"></p>
+                                    </div>
+                                    <div class="ml-4">
+                                        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-white text-indigo-600 shadow-lg">
+                                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                                            </svg>
+                                            <span x-text="website.product_count || 0"></span>
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Card Body -->
+                        <div class="p-6">
+                            <!-- Status Information -->
+                            <div class="space-y-3 mb-6">
+                                <div class="flex items-center text-sm">
+                                    <svg class="w-5 h-5 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                    </svg>
+                                    <span class="text-gray-600 dark:text-gray-400">
+                                        <span x-show="website.sitemap_last_checked" x-text="'Last crawl: ' + new Date(website.sitemap_last_checked).toLocaleString()"></span>
+                                        <span x-show="!website.sitemap_last_checked" class="text-yellow-600 dark:text-yellow-400 font-medium">Never crawled</span>
+                                    </span>
+                                </div>
+                                
+                                <div class="flex items-center text-sm" x-show="website.cron_schedule">
+                                    <svg class="w-5 h-5 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                    </svg>
+                                    <span class="text-gray-600 dark:text-gray-400" x-text="'Schedule: ' + website.cron_schedule"></span>
+                                </div>
+
+                                <!-- Last Error Banner -->
+                                <div x-show="website.last_error" class="mt-3 p-3 rounded-lg bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800">
+                                    <div class="flex items-start gap-2">
+                                        <svg class="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                                        </svg>
+                                        <div class="flex-1 min-w-0">
+                                            <p class="text-xs font-semibold text-red-700 dark:text-red-400">Crawl Error</p>
+                                            <p class="text-xs text-red-600 dark:text-red-300 break-words mt-0.5" x-text="website.last_error"></p>
+                                            <p class="text-xs text-red-400 dark:text-red-500 mt-1" x-show="website.last_error_at" x-text="'at ' + new Date(website.last_error_at).toLocaleString()"></p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Progress Bar (if crawling) -->
+                                <div x-show="website.is_crawling" class="mt-4">
+                                    <div class="flex items-center justify-between text-xs mb-1">
+                                        <span class="text-gray-600 dark:text-gray-400">Crawling in progress...</span>
+                                        <span class="text-indigo-600 dark:text-indigo-400 font-semibold animate-pulse-slow">Active</span>
+                                    </div>
+                                    <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
+                                        <div class="gradient-bg h-2 rounded-full animate-progress"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Action Buttons -->
+                            <div class="grid grid-cols-2 gap-2 mb-2">
+                                <div class="tooltip-container w-full" x-show="!website.is_crawling">
+                                    <button @click="crawlWebsite(website.id)" 
+                                            class="w-full flex items-center justify-center px-3 py-2 rounded-lg font-medium text-sm transition-all duration-200 gradient-success text-white hover:shadow-lg transform hover:scale-105">
+                                        <svg class="w-4 h-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                            <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round"/>
+                                            <path d="M9 12l2 2 4-4" stroke-linecap="round" stroke-linejoin="round"/>
+                                        </svg>
+                                        <span x-text="website.current_task_id ? 'Resume' : 'Start'"></span>
+                                    </button>
+                                    <span class="tooltip-text" x-text="website.current_task_id ? 'Resume crawling from where it left off' : 'Start crawling this website now'"></span>
+                                </div>
+                                <div class="tooltip-container w-full" x-show="website.is_crawling || stoppingWebsiteIds.includes(website.id)">
+                                    <button @click="stopCrawl(website.id)" 
+                                            :disabled="stoppingWebsiteIds.includes(website.id)"
+                                            class="w-full flex items-center justify-center px-3 py-2 rounded-lg font-medium text-sm transition-all duration-200 bg-orange-500 text-white hover:bg-orange-600 hover:shadow-lg transform hover:scale-105 disabled:opacity-60 disabled:cursor-not-allowed">
+                                        <svg class="w-4 h-4 mr-1" viewBox="0 0 24 24" fill="currentColor">
+                                            <rect x="6" y="6" width="12" height="12" rx="2"/>
+                                        </svg>
+                                        <span x-text="stoppingWebsiteIds.includes(website.id) ? 'Pausing...' : 'Pause'"></span>
+                                    </button>
+                                    <span class="tooltip-text">Pause the crawl (progress will be saved)</span>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-1 gap-2">
+                                <div class="tooltip-container w-full">
+                                    <button @click="configWebsite(website)" 
+                                            class="w-full flex items-center justify-center px-3 py-2 rounded-lg font-medium text-sm transition-all duration-200 bg-blue-500 text-white hover:bg-blue-600 hover:shadow-lg transform hover:scale-105">
+                                        <svg class="w-4 h-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <circle cx="12" cy="12" r="3"/>
+                                            <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+                                        </svg>
+                                        Configure
+                                    </button>
+                                    <span class="tooltip-text">Configure selectors and notifications</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <!-- Tracked Products Section -->
+            <div class="mt-8">
+                <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-6">Tracked Products</h2>
+                <div x-show="trackedProducts.length === 0" class="text-center py-12 bg-gray-50 dark:bg-slate-800 rounded-2xl">
+                    <svg class="mx-auto h-16 w-16 text-gray-400 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/>
+                    </svg>
+                    <h3 class="mt-4 text-lg font-semibold text-gray-900 dark:text-gray-100">No tracked products</h3>
+                    <p class="mt-2 text-gray-600 dark:text-gray-400">Start tracking products to receive price change notifications</p>
+                </div>
+                <div x-show="trackedProducts.length > 0" class="space-y-4">
+                    <template x-for="product in trackedProducts" :key="product.id">
+                        <div class="glass-effect rounded-xl p-4 shadow-lg card-hover">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center space-x-4">
+                                    <img :src="product.image || '/static/images/placeholder-product.png'" 
+                                         :alt="product.title" 
+                                         class="w-12 h-12 rounded-lg object-cover bg-gray-100 dark:bg-slate-700">
+                                    <div>
+                                        <h4 class="font-semibold text-gray-900 dark:text-white truncate max-w-xs" x-text="product.title"></h4>
+                                        <p class="text-sm text-gray-600 dark:text-gray-400" x-text="'$' + (product.price || '0.00')"></p>
+                                    </div>
+                                </div>
+                                <div class="flex items-center space-x-2">
+                                    <span class="px-2 py-1 text-xs font-medium rounded-full"
+                                          :class="{
+                                              'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200': product.priority === 'urgent',
+                                              'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200': product.priority === 'moderate',
+                                              'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200': product.priority === 'normal'
+                                          }"
+                                          x-text="product.priority || 'normal'"></span>
+                                    <button @click="editTrackedProduct(product)" 
+                                            class="p-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                        </svg>
+                                    </button>
+                                    <button @click="deleteTrackedProduct(product.id)" 
+                                            class="p-2 rounded-lg text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </div>
+
+        <!-- Configure Website Modal -->
+        <div x-show="showConfigModal" class="fixed z-50 inset-0 overflow-y-auto" style="display: none;">
+            <div class="flex items-center justify-center min-h-screen px-4 py-8">
+                <div class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm transition-opacity" @click="showConfigModal = false"></div>
+                <div class="relative rounded-2xl overflow-hidden shadow-2xl transform transition-all max-w-2xl w-full z-20 animate-slide-in"
+                     :class="darkMode ? 'bg-slate-800' : 'bg-white'">
+                    <div class="bg-blue-600 p-6">
+                        <h3 class="text-2xl font-bold text-white flex items-center">
+                            <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                            </svg>
+                            Configure: <span class="ml-2 font-light" x-text="configWebsiteData.name"></span>
+                        </h3>
+                    </div>
+                    <div class="p-6 overflow-y-auto max-h-[70vh] space-y-6">
+
+                        <!-- Discord Webhook -->
+                        <div>
+                            <h4 class="text-base font-semibold mb-3 flex items-center" :class="darkMode ? 'text-white' : 'text-gray-900'">
+                                <svg class="w-5 h-5 mr-2 text-indigo-500" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057c.002.022.015.043.03.054a19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z"/>
+                                </svg>
+                                Discord Notifications
+                            </h4>
+                            <input x-model="configWebsiteData.discord_webhook_url" type="url"
+                                   placeholder="https://discord.com/api/webhooks/..."
+                                   class="w-full px-4 py-3 rounded-lg border-2 transition-colors duration-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                                   :class="darkMode ? 'bg-slate-700 border-slate-600 text-white placeholder-gray-400' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'">
+                            <p class="text-xs mt-1" :class="darkMode ? 'text-gray-400' : 'text-gray-500'">Notifications for price changes will be sent to this channel.</p>
+                        </div>
+
+                        <!-- Selectors -->
+                        <div>
+                            <div class="flex items-center justify-between mb-3">
+                                <h4 class="text-base font-semibold flex items-center" :class="darkMode ? 'text-white' : 'text-gray-900'">
+                                    <svg class="w-5 h-5 mr-2 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
+                                    </svg>
+                                    CSS Selectors
+                                </h4>
+                                <button @click="addSelector()" class="flex items-center px-3 py-1 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                    </svg>
+                                    Add Selector
+                                </button>
+                            </div>
+
+                            <!-- Selector Documentation -->
+                            <div class="mb-4 p-4 rounded-lg" :class="darkMode ? 'bg-slate-900/50 border border-slate-700' : 'bg-blue-50 border border-blue-200'">
+                                <details class="cursor-pointer">
+                                    <summary class="text-sm font-semibold mb-2" :class="darkMode ? 'text-blue-400' : 'text-blue-700'">📖 Selector Guide & Examples</summary>
+                                    <div class="mt-3 space-y-3 text-xs" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">
+                                        <div>
+                                            <p class="font-semibold mb-1">Supported Selectors:</p>
+                                            <ul class="list-disc list-inside space-y-1 ml-2">
+                                                <li><strong>Title</strong> - Product name/heading</li>
+                                                <li><strong>Price</strong> - Current price (numeric value)</li>
+                                                <li><strong>Image</strong> - Product image URL</li>
+                                                <li><strong>Availability</strong> - Stock status, sale badges, etc.</li>
+                                                <li><strong>SKU</strong> - Product identifier/code</li>
+                                                <li><strong>Brand</strong> - Manufacturer/brand name</li>
+                                                <li><strong>Description</strong> - Product description text</li>
+                                            </ul>
+                                        </div>
+                                        <div>
+                                            <p class="font-semibold mb-1">Example Selectors:</p>
+                                            <ul class="list-none space-y-1 ml-2">
+                                                <li><code class="px-1.5 py-0.5 rounded" :class="darkMode ? 'bg-slate-800' : 'bg-white'">h1.product-title</code> - Title by class</li>
+                                                <li><code class="px-1.5 py-0.5 rounded" :class="darkMode ? 'bg-slate-800' : 'bg-white'">.price-current span</code> - Price in nested element</li>
+                                                <li><code class="px-1.5 py-0.5 rounded" :class="darkMode ? 'bg-slate-800' : 'bg-white'">img[data-src]</code> - Image with data attribute</li>
+                                                <li><code class="px-1.5 py-0.5 rounded" :class="darkMode ? 'bg-slate-800' : 'bg-white'">#availability-status</code> - Availability by ID</li>
+                                            </ul>
+                                        </div>
+                                        <div>
+                                            <p class="font-semibold mb-1">💡 Tips:</p>
+                                            <ul class="list-disc list-inside space-y-1 ml-2">
+                                                <li>Add multiple selectors as fallbacks (tried in order)</li>
+                                                <li>Use browser DevTools to inspect elements</li>
+                                                <li>Test selectors on the actual product page first</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </details>
+                            </div>
+
+                            <div x-show="configSelectors.length === 0" class="text-center py-6 rounded-lg border-2 border-dashed" :class="darkMode ? 'border-slate-600 text-gray-400' : 'border-gray-300 text-gray-500'">
+                                <p class="text-sm">No selectors configured. Add selectors to extract product data.</p>
+                            </div>
+
+                            <div class="space-y-3">
+                                <template x-for="(sel, idx) in configSelectors" :key="idx">
+                                    <div class="rounded-lg p-4 border" :class="darkMode ? 'bg-slate-700 border-slate-600' : 'bg-gray-50 border-gray-200'">
+                                        <div class="flex items-center justify-between mb-3">
+                                            <select x-model="sel.name"
+                                                    class="px-3 py-1.5 rounded-lg border text-sm font-medium focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                                    :class="darkMode ? 'bg-slate-600 border-slate-500 text-white' : 'bg-white border-gray-300 text-gray-900'">
+                                                <option value="title">Title</option>
+                                                <option value="price">Price</option>
+                                                <option value="image">Image</option>
+                                                <option value="availability">Availability</option>
+                                                <option value="sku">SKU</option>
+                                                <option value="brand">Brand</option>
+                                                <option value="description">Description</option>
+                                            </select>
+                                            <button @click="removeSelector(idx)" class="p-1.5 text-red-500 hover:bg-red-100 dark:hover:bg-red-900 rounded-lg transition-colors">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                                </svg>
+                                            </button>
+                                        </div>
+                                        <div class="space-y-2">
+                                            <template x-for="(cssVal, csIdx) in sel.values" :key="csIdx">
+                                                <div class="flex items-center gap-2">
+                                                    <input x-model="sel.values[csIdx]" type="text"
+                                                           :placeholder="'CSS selector #' + (csIdx + 1)"
+                                                           class="flex-1 px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                                           :class="darkMode ? 'bg-slate-600 border-slate-500 text-white placeholder-gray-400' : 'bg-white border-gray-300 text-gray-900'">
+                                                    <button @click="removeSelectorValue(idx, csIdx)" x-show="sel.values.length > 1"
+                                                            class="p-1.5 text-gray-400 hover:text-red-500 transition-colors">
+                                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"/>
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                            </template>
+                                            <button @click="addSelectorValue(idx)" class="text-xs text-purple-500 hover:text-purple-700 font-medium flex items-center">
+                                                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                                </svg>
+                                                Add fallback selector
+                                            </button>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="px-6 py-4 flex justify-end space-x-3" :class="darkMode ? 'bg-slate-900' : 'bg-gray-50'">
+                        <button @click="showConfigModal = false"
+                                class="px-6 py-2 rounded-lg font-medium transition-all duration-200 transform hover:scale-105"
+                                :class="darkMode ? 'bg-slate-700 text-gray-300 hover:bg-slate-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'">
+                            Cancel
+                        </button>
+                        <button @click="saveConfig()"
+                                class="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium shadow-lg hover:shadow-xl hover:bg-blue-700 transform hover:scale-105 transition-all duration-200">
+                            Save Configuration
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Confirmation Dialog -->
+        <div x-show="showConfirmModal" class="confirm-overlay" style="display: none;">
+            <div class="confirm-dialog">
+                <h3 class="text-lg font-bold mb-4" x-text="confirmTitle"></h3>
+                <p class="text-sm text-gray-600 dark:text-gray-400" x-text="confirmMessage"></p>
+                <div class="flex justify-end mt-6 space-x-3">
+                    <button @click="cancelConfirm()" 
+                            class="px-6 py-2 rounded-lg font-medium transition-all duration-200 transform hover:scale-105"
+                            :class="darkMode ? 'bg-slate-700 text-gray-300 hover:bg-slate-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'">
+                        Cancel
+                    </button>
+                    <button @click="confirmAction()" 
+                            class="px-6 py-2 rounded-lg font-medium bg-red-500 text-white hover:bg-red-600 shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200">
+                        Confirm
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function dashboard() {
+        return {
+            websites: [],
+            trackedProducts: [],
+            stoppingWebsiteIds: [],
+            darkMode: localStorage.getItem('darkMode') === 'true',
+            mobileMenuOpen: false,
+            showConfigModal: false,
+            showConfirmModal: false,
+            confirmTitle: '',
+            confirmMessage: '',
+            confirmResolve: null,
+            configuringWebsite: null,
+            totalProducts: 0,
+            activeCrawls: 0,
+            lastUpdate: 'Just now',
+            configWebsiteData: {
+                name: '',
+                discord_webhook_url: ''
+            },
+            configSelectors: [],
+            async init() {
+                const token = localStorage.getItem('access_token');
+                if (!token) {
+                    window.location.href = '/login';
+                    return;
+                }
+                await this.loadWebsites();
+                await this.loadTrackedProducts();
+                this.updateStats();
+                
+                // Auto-refresh every 30 seconds to avoid rate limits
+                setInterval(async () => {
+                    await this.loadWebsites();
+                    await this.loadTrackedProducts();
+                    this.updateStats();
+                }, 30000);
+            },
+            updateStats() {
+                this.totalProducts = this.websites.reduce((sum, w) => sum + (w.product_count || 0), 0);
+                this.activeCrawls = this.websites.filter(w => w.is_crawling).length;
+                this.lastUpdate = new Date().toLocaleTimeString();
+            },
+            async loadWebsites() {
+                const token = localStorage.getItem('access_token');
+                const response = await fetch('/api/websites', {
+                    headers: {
+                        'Authorization': 'Bearer ' + token
+                    }
+                });
+                if (response.ok) {
+                    this.websites = await response.json();
+                } else if (response.status === 401) {
+                    localStorage.removeItem('access_token');
+                    localStorage.removeItem('refresh_token');
+                    window.location.href = '/login';
+                }
+            },
+            async loadTrackedProducts() {
+                const token = localStorage.getItem('access_token');
+                try {
+                    const response = await fetch('/api/tracked-products', {
+                        headers: {
+                            'Authorization': 'Bearer ' + token
+                        }
+                    });
+                    if (response.ok) {
+                        this.trackedProducts = await response.json();
+                    }
+                } catch (error) {
+                    console.error('Failed to load tracked products:', error);
+                }
+            },
+            editTrackedProduct(product) {
+                // TODO: Implement tracked product editing modal
+                console.log('Edit tracked product:', product);
+            },
+            async deleteTrackedProduct(productId) {
+                if (!confirm('Are you sure you want to stop tracking this product?')) return;
+                
+                const token = localStorage.getItem('access_token');
+                try {
+                    const response = await fetch(`/api/tracked-products/${productId}`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Authorization': 'Bearer ' + token
+                        }
+                    });
+                    if (response.ok) {
+                        this.trackedProducts = this.trackedProducts.filter(p => p.id !== productId);
+                        this.showNotification('✅ Product tracking removed', 'success');
+                    }
+                } catch (error) {
+                    console.error('Failed to delete tracked product:', error);
+                    this.showNotification('❌ Failed to remove tracking', 'error');
+                }
+            },
+            async crawlWebsite(id) {
+                const token = localStorage.getItem('access_token');
+                const response = await fetch(`/api/websites/${id}/crawl`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer ' + token,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ force_full_crawl: false })
+                });
+                if (response.ok) {
+                    // Show success notification
+                    const notification = document.createElement('div');
+                    notification.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-slide-in';
+                    notification.textContent = '🚀 Crawl started successfully!';
+                    document.body.appendChild(notification);
+                    setTimeout(() => notification.remove(), 3000);
+
+                    await this.loadWebsites();
+                    this.updateStats();
+                } else {
+                    const data = await response.json();
+                    this.showNotification(`❌ Failed to start crawl: ${data.error || 'Unknown error'}`, 'error');
+                }
+            },
+            async stopCrawl(id) {
+                const token = localStorage.getItem('access_token');
+                if (!token) {
+                    this.showNotification('❌ Please log in again', 'error');
+                    return;
+                }
+
+                if (this.stoppingWebsiteIds.includes(id)) {
+                    return;
+                }
+
+                this.stoppingWebsiteIds.push(id);
+                
+                try {
+                    const response = await fetch(`/api/websites/${id}/crawl/stop`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': 'Bearer ' + token,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        this.showNotification(`✅ Crawl stopped! ${data.message}`, 'success');
+                        // Immediately reload to sync state and clear error banner
+                        await this.loadWebsites();
+                        this.updateStats();
+                    } else {
+                        this.showNotification(`❌ Failed to stop crawl: ${data.error || 'Unknown error'}`, 'error');
+                    }
+                } catch (error) {
+                    console.error('Stop crawl error:', error);
+                    this.showNotification('❌ Failed to stop crawl', 'error');
+                } finally {
+                    this.stoppingWebsiteIds = this.stoppingWebsiteIds.filter(websiteId => websiteId !== id);
+                }
+            },
+            async configWebsite(website) {
+                this.configuringWebsite = website;
+                this.configWebsiteData = {
+                    name: website.name,
+                    discord_webhook_url: website.discord_webhook_url || ''
+                };
+                // Load existing selectors
+                const token = localStorage.getItem('access_token');
+                try {
+                    const res = await fetch(`/api/selectors/websites/${website.id}/selectors`, {
+                        headers: { 'Authorization': 'Bearer ' + token }
+                    });
+                    if (res.ok) {
+                        const selectors = await res.json();
+                        // Group selectors by name, each with a values array
+                        const grouped = {};
+                        selectors.forEach(s => {
+                            if (!grouped[s.name]) grouped[s.name] = { name: s.name, values: [], ids: [] };
+                            grouped[s.name].values.push(s.selector);
+                            grouped[s.name].ids.push(s.id);
+                        });
+                        this.configSelectors = Object.values(grouped);
+                    } else {
+                        this.configSelectors = [];
+                    }
+                } catch (e) {
+                    this.configSelectors = [];
+                }
+                this.showConfigModal = true;
+            },
+            addSelector() {
+                this.configSelectors.push({ name: 'title', values: [''], ids: [] });
+            },
+            removeSelector(idx) {
+                this.configSelectors.splice(idx, 1);
+            },
+            addSelectorValue(idx) {
+                this.configSelectors[idx].values.push('');
+                this.configSelectors[idx].ids.push(null);
+            },
+            removeSelectorValue(idx, csIdx) {
+                this.configSelectors[idx].values.splice(csIdx, 1);
+                this.configSelectors[idx].ids.splice(csIdx, 1);
+            },
+            async saveConfig() {
+                const token = localStorage.getItem('access_token');
+                const websiteId = this.configuringWebsite.id;
+                try {
+                    // Save discord webhook via website update
+                    const websiteRes = await fetch(`/api/websites/${websiteId}`, {
+                        method: 'PUT',
+                        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ discord_webhook_url: this.configWebsiteData.discord_webhook_url })
+                    });
+
+                    // Delete all existing selectors then re-create
+                    const existingRes = await fetch(`/api/selectors/websites/${websiteId}/selectors`, {
+                        headers: { 'Authorization': 'Bearer ' + token }
+                    });
+                    if (existingRes.ok) {
+                        const existing = await existingRes.json();
+                        for (const s of existing) {
+                            await fetch(`/api/selectors/websites/${websiteId}/selectors/${s.id}`, {
+                                method: 'DELETE',
+                                headers: { 'Authorization': 'Bearer ' + token }
+                            });
+                        }
+                    }
+
+                    // Create new selectors
+                    for (const group of this.configSelectors) {
+                        for (const val of group.values) {
+                            if (!val.trim()) continue;
+                            await fetch(`/api/selectors/websites/${websiteId}/selectors`, {
+                                method: 'POST',
+                                headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ name: group.name, selector: val.trim() })
+                            });
+                        }
+                    }
+
+                    this.showConfigModal = false;
+                    this.showNotification('✅ Configuration saved!', 'success');
+                    await this.loadWebsites();
+                } catch (e) {
+                    this.showNotification('❌ Failed to save configuration', 'error');
+                }
+            },
+            confirm(title, message) {
+                return new Promise((resolve) => {
+                    this.confirmTitle = title;
+                    this.confirmMessage = message;
+                    this.confirmResolve = resolve;
+                    this.showConfirmModal = true;
+                });
+            },
+            confirmAction() {
+                this.showConfirmModal = false;
+                if (this.confirmResolve) {
+                    this.confirmResolve(true);
+                    this.confirmResolve = null;
+                }
+            },
+            cancelConfirm() {
+                this.showConfirmModal = false;
+                if (this.confirmResolve) {
+                    this.confirmResolve(false);
+                    this.confirmResolve = null;
+                }
+            },
+            showNotification(message, type = 'success') {
+                const colors = {
+                    success: 'bg-green-500',
+                    error: 'bg-red-500',
+                    info: 'bg-purple-500'
+                };
+                const notification = document.createElement('div');
+                notification.className = `fixed top-4 right-4 ${colors[type]} text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-slide-in`;
+                notification.textContent = message;
+                document.body.appendChild(notification);
+                setTimeout(() => notification.remove(), 3000);
+            }
+        }
+    }
+</script>
+{% endblock %}

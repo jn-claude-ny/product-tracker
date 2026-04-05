@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+
+{% block title %}Alerts - Product Tracker{% endblock title %}
+
+{% block content %}
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+    body { font-family: 'Inter', sans-serif; }
+    .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    .animate-fade-in { animation: fadeIn 0.4s ease-out; }
+    @keyframes slideIn { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
+    .animate-slide-in { animation: slideIn 0.5s ease-out; }
+    .alert-card { transition: all 0.3s ease; }
+    .alert-card:hover { transform: translateX(4px); box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1); }
+    .timeline-line { position: absolute; left: 20px; top: 0; bottom: 0; width: 2px; }
+</style>
+
+<div x-data="alerts()" x-init="init()" :class="darkMode ? 'dark' : ''">
+    <div class="min-h-screen transition-colors duration-300" :class="darkMode ? 'bg-slate-900' : 'bg-gray-50'">
+        <div class="px-4 py-8 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+            
+            <!-- Header -->
+            <div class="flex justify-between items-center mb-8 animate-fade-in">
+                <div>
+                    <h1 class="text-4xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                        Alerts
+                    </h1>
+                    <p class="mt-2 text-gray-600 dark:text-gray-400">Real-time notifications for tracked products</p>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <div class="px-4 py-2 rounded-xl font-semibold" :class="darkMode ? 'bg-slate-800 text-purple-400' : 'bg-purple-100 text-purple-700'">
+                        <span x-text="alerts.length"></span> Alerts
+                    </div>
+                    <button @click="darkMode = !darkMode; localStorage.setItem('darkMode', darkMode)" 
+                            class="p-2 rounded-lg transition-colors duration-200"
+                            :class="darkMode ? 'bg-slate-800 text-yellow-400' : 'bg-white text-gray-600'">
+                        <svg x-show="!darkMode" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+                        </svg>
+                        <svg x-show="darkMode" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Alerts Timeline -->
+            <div x-show="alerts.length > 0" class="relative animate-fade-in">
+                <!-- Timeline Line -->
+                <div class="timeline-line" :class="darkMode ? 'bg-slate-700' : 'bg-gray-300'"></div>
+                
+                <div class="space-y-6">
+                    <template x-for="(alert, index) in alerts" :key="alert.id">
+                        <div class="relative pl-16 animate-slide-in" :style="`animation-delay: ${index * 0.05}s`">
+                            <!-- Timeline Dot -->
+                            <div class="absolute left-0 top-6 w-10 h-10 rounded-full flex items-center justify-center shadow-lg"
+                                 :class="{
+                                     'bg-green-500': alert.alert_type === 'new_match',
+                                     'bg-yellow-500': alert.alert_type === 'price_drop',
+                                     'bg-blue-500': alert.alert_type === 'back_in_stock',
+                                     'bg-purple-500': alert.alert_type === 'restock'
+                                 }">
+                                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path x-show="alert.alert_type === 'new_match'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                    <path x-show="alert.alert_type === 'price_drop'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"/>
+                                    <path x-show="alert.alert_type === 'back_in_stock'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                </svg>
+                            </div>
+                            
+                            <!-- Alert Card -->
+                            <div class="alert-card rounded-2xl overflow-hidden shadow-lg"
+                                 :class="darkMode ? 'bg-slate-800 border border-slate-700' : 'bg-white border border-gray-200'">
+                                <div class="p-6">
+                                    <div class="flex items-start justify-between mb-4">
+                                        <div class="flex-1">
+                                            <!-- Alert Type Badge -->
+                                            <div class="mb-3">
+                                                <span class="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide"
+                                                      :class="{
+                                                          'bg-green-500/20 text-green-600 dark:text-green-400': alert.alert_type === 'new_match',
+                                                          'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400': alert.alert_type === 'price_drop',
+                                                          'bg-blue-500/20 text-blue-600 dark:text-blue-400': alert.alert_type === 'back_in_stock'
+                                                      }"
+                                                      x-text="alert.alert_type.replace('_', ' ')"></span>
+                                            </div>
+                                            
+                                            <!-- Product Info -->
+                                            <h3 class="font-bold text-xl mb-2" 
+                                                :class="darkMode ? 'text-white' : 'text-gray-900'"
+                                                x-text="alert.product?.title || 'Product Alert'"></h3>
+                                            <p class="text-sm mb-3" 
+                                               :class="darkMode ? 'text-gray-400' : 'text-gray-600'"
+                                               x-text="alert.product?.brand || 'Unknown brand'"></p>
+                                            
+                                            <!-- Price -->
+                                            <div class="flex items-center space-x-4 mb-4">
+                                                <div>
+                                                    <p class="text-sm" :class="darkMode ? 'text-gray-400' : 'text-gray-600'">Current Price</p>
+                                                    <p class="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent"
+                                                       x-text="(alert.product?.currency || '$') + ' ' + (alert.product?.price || 'N/A')"></p>
+                                                </div>
+                                                <div x-show="alert.alert_type === 'price_drop' && alert.old_price">
+                                                    <p class="text-sm" :class="darkMode ? 'text-gray-400' : 'text-gray-600'">Was</p>
+                                                    <p class="text-lg font-semibold line-through" 
+                                                       :class="darkMode ? 'text-gray-500' : 'text-gray-400'"
+                                                       x-text="(alert.product?.currency || '$') + ' ' + alert.old_price"></p>
+                                                </div>
+                                            </div>
+                                            
+                                            <!-- Timestamp -->
+                                            <div class="flex items-center text-sm" :class="darkMode ? 'text-gray-400' : 'text-gray-500'">
+                                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                                </svg>
+                                                <span x-text="new Date(alert.sent_at).toLocaleString()"></span>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Product Image -->
+                                        <div class="ml-6 flex-shrink-0">
+                                            <div class="w-24 h-24 rounded-xl overflow-hidden bg-gradient-to-br from-purple-100 to-indigo-100 dark:from-slate-700 dark:to-slate-600">
+                                                <img x-show="alert.product?.image" :src="alert.product?.image" 
+                                                     class="w-full h-full object-cover" 
+                                                     :alt="alert.product?.title">
+                                                <div x-show="!alert.product?.image" class="flex items-center justify-center h-full">
+                                                    <svg class="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                                    </svg>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Action Button -->
+                                    <a :href="{{ url_for('views.alerts') }}{{ alert.product?.url }}" target="_blank" 
+                                       class="inline-flex items-center px-6 py-3 rounded-xl font-semibold transition-all duration-200 transform hover:scale-105"
+                                       :class="darkMode ? 'bg-purple-600 text-white hover:bg-purple-700' : 'bg-purple-600 text-white hover:bg-purple-700'">
+                                        View Product
+                                        <svg class="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+                                        </svg>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+            
+            <!-- Empty State -->
+            <div x-show="alerts.length === 0" class="text-center py-16 animate-fade-in">
+                <div class="mx-auto w-24 h-24 rounded-full bg-gradient-to-br from-purple-100 to-indigo-100 dark:from-slate-800 dark:to-slate-700 flex items-center justify-center mb-6">
+                    <svg class="w-12 h-12" :class="darkMode ? 'text-gray-400' : 'text-gray-500'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+                    </svg>
+                </div>
+                <h3 class="text-2xl font-bold mb-2" :class="darkMode ? 'text-gray-300' : 'text-gray-900'">No alerts yet</h3>
+                <p class="text-lg" :class="darkMode ? 'text-gray-400' : 'text-gray-600'">You'll be notified when products match your tracking rules</p>
+            </div>
+
+            <!-- Pagination -->
+            <div x-show="totalPages > 1" class="mt-8 flex justify-between items-center animate-fade-in">
+                <button @click="prevPage()" :disabled="page === 1" 
+                        class="px-6 py-3 rounded-xl font-semibold transition-all duration-200 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                        :class="darkMode ? 'bg-slate-800 text-white hover:bg-slate-700' : 'bg-white text-gray-700 hover:bg-gray-50 border-2 border-gray-300'">
+                    <div class="flex items-center">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                        </svg>
+                        Previous
+                    </div>
+                </button>
+                
+                <div class="flex items-center space-x-2">
+                    <span class="px-4 py-2 rounded-xl font-semibold" 
+                          :class="darkMode ? 'bg-slate-800 text-white' : 'bg-white text-gray-700 border-2 border-gray-300'">
+                        Page <span x-text="page"></span> of <span x-text="totalPages"></span>
+                    </span>
+                </div>
+                
+                <button @click="nextPage()" :disabled="page >= totalPages" 
+                        class="px-6 py-3 rounded-xl font-semibold transition-all duration-200 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                        :class="darkMode ? 'bg-slate-800 text-white hover:bg-slate-700' : 'bg-white text-gray-700 hover:bg-gray-50 border-2 border-gray-300'">
+                    <div class="flex items-center">
+                        Next
+                        <svg class="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                        </svg>
+                    </div>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function alerts() {
+        return {
+            alerts: [],
+            page: 1,
+            totalPages: 1,
+            socket: null,
+            darkMode: localStorage.getItem('darkMode') === 'true',
+            async init() {
+                const token = localStorage.getItem('access_token');
+                if (!token) {
+                    window.location.href = '/login';
+                    return;
+                }
+                await this.loadAlerts();
+                this.connectWebSocket();
+            },
+            async loadAlerts() {
+                const token = localStorage.getItem('access_token');
+                const params = new URLSearchParams({
+                    page: this.page,
+                    page_size: 50
+                });
+                const response = await fetch('/api/alerts?' + params, {
+                    headers: {
+                        'Authorization': 'Bearer ' + token
+                    }
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    this.alerts = data.results;
+                    this.totalPages = data.pages;
+                } else if (response.status === 401) {
+                    localStorage.removeItem('access_token');
+                    localStorage.removeItem('refresh_token');
+                    window.location.href = '/login';
+                }
+            },
+            connectWebSocket() {
+                const token = localStorage.getItem('access_token');
+                this.socket = io({
+                    auth: { token: token }
+                });
+                
+                this.socket.on('connect', () => {
+                    console.log('WebSocket connected');
+                    this.socket.emit('join_alerts', { token: token });
+                });
+                
+                this.socket.on('new_alert', (data) => {
+                    this.alerts.unshift(data);
+                });
+            },
+            async prevPage() {
+                if (this.page > 1) {
+                    this.page--;
+                    await this.loadAlerts();
+                }
+            },
+            async nextPage() {
+                if (this.page < this.totalPages) {
+                    this.page++;
+                    await this.loadAlerts();
+                }
+            }
+        }
+    }
+</script>
+{% endblock content %}
