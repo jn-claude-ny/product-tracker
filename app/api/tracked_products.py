@@ -11,10 +11,15 @@ bp = Blueprint('tracked_products', __name__)
 class TrackedProductSchema(Schema):
     id = fields.Int(dump_only=True)
     product_id = fields.Int(required=True)
-    priority = fields.Str(validate=lambda x: x in ['urgent', 'moderate', 'normal'])
+    priority = fields.Str(validate=lambda x: x in ['now', 'urgent', 'high', 'moderate', 'normal'])
     crawl_period_hours = fields.Int(validate=lambda x: x >= 1)
+    # New price direction tracking
+    price_direction = fields.Str(validate=lambda x: x in ['above', 'below'], allow_none=True)
+    price_reference = fields.Decimal(places=2, allow_none=True)
+    # Legacy price tracking
     price_condition = fields.Str(validate=lambda x: x in ['greater_than', 'less_than', 'equal_to'], allow_none=True)
     price_threshold = fields.Decimal(places=2, allow_none=True)
+    size_filter = fields.List(fields.Str(), allow_none=True)
     discord_webhook_url = fields.Str(allow_none=True)
     created_at = fields.DateTime(dump_only=True)
     updated_at = fields.DateTime(dump_only=True)
@@ -81,6 +86,10 @@ def create_tracked_product():
     if existing:
         return jsonify({'error': 'Product already being tracked'}), 400
 
+    # Set price reference if price_direction is provided
+    if data.get('price_direction') and product.price_current:
+        data['price_reference'] = float(product.price_current)
+
     # Create tracked product
     tracked_product = TrackedProduct(
         user_id=user_id,
@@ -89,6 +98,13 @@ def create_tracked_product():
 
     db.session.add(tracked_product)
     db.session.commit()
+
+    # Trigger immediate check if priority is 'now' or 'urgent'
+    priority = data.get('priority', 'normal')
+    if priority in ['now', 'urgent']:
+        from celery_app.tasks.tracked_product_tasks import trigger_tracked_product_now
+        result = trigger_tracked_product_now.delay(tracked_product.id)
+        print(f"[TRACK] Triggered immediate check for tracked product {tracked_product.id}, task: {result.id}")
 
     response_schema = TrackedProductSchema()
     return jsonify(response_schema.dump(tracked_product)), 201

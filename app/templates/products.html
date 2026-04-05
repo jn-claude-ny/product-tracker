@@ -11,6 +11,14 @@
     .animate-fade-in { animation: fadeIn 0.4s ease-out; }
     .product-card { transition: all 0.3s ease; }
     .product-card:hover { transform: translateY(-4px); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); }
+    
+    .dark { background-color: #0f172a; color: #e2e8f0; }
+    .dark .bg-white { background-color: #1e293b; }
+    .dark .text-gray-900 { color: #f1f5f9; }
+    .dark .text-gray-700 { color: #cbd5e1; }
+    .dark .text-gray-500 { color: #94a3b8; }
+    .dark .border-gray-200 { border-color: #334155; }
+    .dark .bg-gray-50 { background-color: #1e293b; }
 </style>
 
 <div x-data="products()" x-init="init()" :class="darkMode ? 'dark' : ''">
@@ -23,553 +31,787 @@
                     <h1 class="text-4xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
                         Products
                     </h1>
-                    <p class="mt-2 text-gray-600 dark:text-gray-400">Browse and search tracked products</p>
+                    <p class="mt-2 text-gray-600 dark:text-gray-400">Browse and track products across all websites</p>
                 </div>
-                <div class="flex items-center space-x-4">
-                    <button @click="darkMode = !darkMode; localStorage.setItem('darkMode', darkMode)" 
-                            class="p-2 rounded-lg transition-colors duration-200"
-                            :class="darkMode ? 'bg-slate-800 text-yellow-400' : 'bg-white text-gray-600'">
-                        <svg x-show="!darkMode" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
-                        </svg>
-                        <svg x-show="darkMode" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
-                        </svg>
-                    </button>
-                </div>
+                <button @click="darkMode = !darkMode; localStorage.setItem('darkMode', darkMode)" 
+                        class="p-2 rounded-lg transition-colors duration-200"
+                        :class="darkMode ? 'bg-slate-800 text-yellow-400' : 'bg-white text-gray-600'">
+                    <svg x-show="!darkMode" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+                    </svg>
+                    <svg x-show="darkMode" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+                    </svg>
+                </button>
             </div>
 
             <!-- Search & Filters -->
             <div class="mb-6 space-y-4 animate-fade-in">
-                <div class="flex flex-col md:flex-row gap-4">
+                <div class="flex flex-col lg:flex-row gap-4">
                     <!-- Search Bar -->
                     <div class="flex-1 relative">
                         <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                            <svg class="w-5 h-5" :class="darkMode ? 'text-gray-400' : 'text-gray-500'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
                             </svg>
                         </div>
-                        <input x-model="searchQuery" @input="search()" type="text" 
-                               placeholder="Search products by title, brand, or description..." 
-                               class="w-full pl-12 pr-4 py-3 rounded-xl border-2 transition-all duration-300 focus:outline-none focus:ring-2"
-                               :class="darkMode ? 'bg-slate-800 border-slate-700 text-white placeholder-gray-400 focus:border-purple-500 focus:ring-purple-500/20' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:border-purple-600 focus:ring-purple-600/20'">
+                        <input x-model="searchQuery" @input="onSearchInput()" type="text" 
+                               placeholder="Search products..." 
+                               class="w-full pl-12 pr-4 py-3 rounded-xl border-2 transition-all"
+                               :class="darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-gray-300 text-gray-900'">
                     </div>
                     
                     <!-- Website Filter -->
-                    <div class="relative">
-                        <select x-model="websiteFilter" @change="search()"
-                                class="appearance-none px-4 py-3 pr-10 rounded-xl border-2 transition-all duration-300 focus:outline-none focus:ring-2 cursor-pointer"
-                                :class="darkMode ? 'bg-slate-800 border-slate-700 text-white focus:border-purple-500 focus:ring-purple-500/20' : 'bg-white border-gray-300 text-gray-900 focus:border-purple-600 focus:ring-purple-600/20'">
-                            <option value="">All Websites</option>
-                            <template x-for="site in websites" :key="site.id">
-                                <option :value="site.id" x-text="site.name"></option>
-                            </template>
-                        </select>
-                        <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                            <svg class="w-5 h-5" :class="darkMode ? 'text-gray-400' : 'text-gray-500'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3"/>
-                            </svg>
-                        </div>
-                    </div>
+                    <select x-model="websiteFilter" @change="applyFilters()"
+                            class="px-4 py-3 rounded-xl border-2 transition-all"
+                            :class="darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-gray-300 text-gray-900'">
+                        <option value="">All Websites</option>
+                        <template x-for="site in websites" :key="site.id">
+                            <option :value="site.id" x-text="site.name"></option>
+                        </template>
+                    </select>
 
-                    <!-- Sort Dropdown -->
-                    <div class="relative">
-                        <select x-model="sortBy" @change="loadProducts()" 
-                                class="appearance-none px-4 py-3 pr-10 rounded-xl border-2 transition-all duration-300 focus:outline-none focus:ring-2 cursor-pointer"
-                                :class="darkMode ? 'bg-slate-800 border-slate-700 text-white focus:border-purple-500 focus:ring-purple-500/20' : 'bg-white border-gray-300 text-gray-900 focus:border-purple-600 focus:ring-purple-600/20'">
-                            <option value="modified_desc">Recently Modified</option>
-                            <option value="price_asc">Price: Low to High</option>
-                            <option value="price_desc">Price: High to Low</option>
-                            <option value="title_asc">Title: A-Z</option>
-                            <option value="created_desc">Recently Added</option>
-                        </select>
-                        <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                            <svg class="w-5 h-5" :class="darkMode ? 'text-gray-400' : 'text-gray-500'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-                            </svg>
-                        </div>
-                    </div>
-                    
-                    <!-- View Toggle -->
-                    <div class="flex rounded-xl overflow-hidden border-2" :class="darkMode ? 'border-slate-700' : 'border-gray-300'">
-                        <button @click="viewMode = 'grid'" 
-                                class="px-4 py-3 transition-all duration-200"
-                                :class="viewMode === 'grid' ? (darkMode ? 'bg-purple-600 text-white' : 'bg-purple-600 text-white') : (darkMode ? 'bg-slate-800 text-gray-400 hover:bg-slate-700' : 'bg-white text-gray-600 hover:bg-gray-50')">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
-                            </svg>
-                        </button>
-                        <button @click="viewMode = 'list'" 
-                                class="px-4 py-3 transition-all duration-200"
-                                :class="viewMode === 'list' ? (darkMode ? 'bg-purple-600 text-white' : 'bg-purple-600 text-white') : (darkMode ? 'bg-slate-800 text-gray-400 hover:bg-slate-700' : 'bg-white text-gray-600 hover:bg-gray-50')">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 12h16M4 6h16M4 18h16"/>
-                            </svg>
-                        </button>
-                    </div>
+                    <!-- Gender Filter -->
+                    <select x-model="genderFilter" @change="applyFilters()"
+                            class="px-4 py-3 rounded-xl border-2 transition-all"
+                            :class="darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-gray-300 text-gray-900'">
+                        <option value="">All Genders</option>
+                        <option value="men">Men</option>
+                        <option value="women">Women</option>
+                        <option value="unisex">Unisex</option>
+                    </select>
+
+                    <!-- Availability Filter -->
+                    <select x-model="availabilityFilter" @change="applyFilters()"
+                            class="px-4 py-3 rounded-xl border-2 transition-all"
+                            :class="darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-gray-300 text-gray-900'">
+                        <option value="">All Stock</option>
+                        <option value="InStock">In Stock</option>
+                        <option value="OutOfStock">Out of Stock</option>
+                        <option value="LowStock">Low Stock</option>
+                    </select>
+
+                    <!-- Sort -->
+                    <select x-model="sortBy" @change="applyFilters()" 
+                            class="px-4 py-3 rounded-xl border-2 transition-all"
+                            :class="darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-gray-300 text-gray-900'">
+                        <option value="updated_desc">Recently Updated</option>
+                        <option value="price_asc">Price: Low to High</option>
+                        <option value="price_desc">Price: High to Low</option>
+                        <option value="title_asc">Title: A-Z</option>
+                    </select>
+                </div>
+
+                <!-- Additional Filters -->
+                <div class="flex flex-wrap gap-2">
+                    <button @click="toggleFilter('is_new')" 
+                            class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                            :class="activeFilters.includes('is_new') ? 'bg-green-500 text-white' : (darkMode ? 'bg-slate-800 text-gray-300' : 'bg-white text-gray-700')">
+                        🆕 New Arrivals
+                    </button>
+                    <button @click="toggleFilter('is_on_sale')" 
+                            class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                            :class="activeFilters.includes('is_on_sale') ? 'bg-red-500 text-white' : (darkMode ? 'bg-slate-800 text-gray-300' : 'bg-white text-gray-700')">
+                        🔥 On Sale
+                    </button>
+                    <button @click="clearFilters()" 
+                            x-show="hasActiveFilters()"
+                            class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                            :class="darkMode ? 'bg-slate-700 text-gray-300' : 'bg-gray-200 text-gray-700'">
+                        Clear Filters
+                    </button>
                 </div>
             </div>
 
-            <!-- Products Grid/List -->
-            <div x-show="products.length > 0" class="animate-fade-in">
-                <!-- Grid View -->
-                <div x-show="viewMode === 'grid'" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <template x-for="product in products" :key="product.product_id">
-                        <div class="product-card rounded-2xl overflow-hidden shadow-lg"
-                             :class="darkMode ? 'bg-slate-800 border border-slate-700' : 'bg-white border border-gray-200'">
-                            <!-- Product Image -->
-                            <div class="relative h-56 bg-gradient-to-br from-purple-100 to-indigo-100 dark:from-slate-700 dark:to-slate-600">
-                                <img x-show="product.image" :src="product.image" 
-                                     class="w-full h-full object-contain p-4" 
-                                     :alt="product.title">
-                                <div x-show="!product.image" class="flex items-center justify-center h-full">
-                                    <svg class="w-16 h-16 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                                    </svg>
-                                </div>
-                                                <!-- Status Badge -->
-                                <div class="absolute top-3 right-3" x-show="product.status_badge">
-                                    <span class="px-3 py-1 rounded-full text-xs font-bold backdrop-blur-sm shadow"
-                                          :class="getStatusBadgeClass(product.status_badge)"
-                                          x-text="product.status_badge"></span>
-                                </div>
+            <!-- Results Count -->
+            <div class="mb-4 text-sm text-gray-600 dark:text-gray-400">
+                Showing <span class="font-semibold" x-text="filteredProducts.length"></span> of <span class="font-semibold" x-text="totalProducts"></span> products
+                <span class="ml-2" x-show="totalPages > 1">(Page <span class="font-semibold" x-text="currentPage"></span> / <span class="font-semibold" x-text="totalPages"></span>)</span>
+            </div>
+
+            <div x-show="isLoading" class="mb-4 text-sm text-gray-600 dark:text-gray-400">Loading products...</div>
+
+            <!-- Products Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                <template x-for="product in filteredProducts" :key="product.id">
+                    <div class="product-card bg-white dark:bg-slate-800 rounded-2xl shadow-lg overflow-hidden border border-gray-200 dark:border-gray-700">
+                        <!-- Product Image -->
+                        <div class="relative h-56 bg-gray-100 dark:bg-slate-700 flex items-start justify-center overflow-hidden">
+                            <img :src="product.image || '/static/images/placeholder.png'" 
+                                 :alt="product.title" 
+                                 class="w-full h-full object-contain">
+                            
+                            <!-- Badges -->
+                            <div class="absolute top-2 left-2 flex flex-col gap-1">
+                                <span x-show="product.is_new" class="px-2 py-1 bg-green-500 text-white text-xs font-bold rounded">NEW</span>
+                                <span x-show="product.is_on_sale" class="px-2 py-1 bg-red-500 text-white text-xs font-bold rounded">SALE</span>
                             </div>
                             
-                            <!-- Product Info -->
-                            <div class="p-5">
-                                <div class="mb-3">
-                                    <h3 class="font-bold text-lg mb-1 line-clamp-2" 
-                                        :class="darkMode ? 'text-white' : 'text-gray-900'"
-                                        x-text="product.title"></h3>
-                                    <p class="text-sm" 
-                                       :class="darkMode ? 'text-gray-400' : 'text-gray-600'"
-                                       x-text="product.brand || 'No brand'"></p>
-                                </div>
+                            <!-- Gender Badge -->
+                            <div class="absolute top-2 right-2">
+                                <span x-show="product.gender" 
+                                      class="px-2 py-1 text-xs font-medium rounded"
+                                      :class="{
+                                          'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200': product.gender === 'men',
+                                          'bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-200': product.gender === 'women',
+                                          'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200': product.gender === 'unisex'
+                                      }"
+                                      x-text="product.gender?.toUpperCase()"></span>
+                            </div>
+                            
+                        </div>
+                        
+                        <!-- Product Info -->
+                        <div class="p-4">
+                            <h3 class="font-semibold text-gray-900 dark:text-white mb-1 line-clamp-2" x-text="product.title"></h3>
+                            <p class="text-sm text-gray-600 dark:text-gray-400 mb-2" x-text="product.brand"></p>
+                            
+                            <!-- Price -->
+                            <div class="flex items-center gap-2 mb-3">
+                                <span class="text-lg font-bold text-gray-900 dark:text-white" x-text="'$' + (product.price_current || '0.00')"></span>
+                                <span x-show="product.sale_price" 
+                                      class="text-sm text-gray-500 dark:text-gray-400 line-through" 
+                                      x-text="'$' + product.sale_price"></span>
+                            </div>
+                            
+                            <!-- Availability & Track Button Row -->
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="text-xs px-2 py-1 rounded-full"
+                                      :class="{
+                                          'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200': product.availability === 'InStock',
+                                          'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200': product.availability === 'OutOfStock',
+                                          'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200': product.availability === 'LowStock'
+                                      }"
+                                      x-text="product.availability || 'Unknown'"></span>
                                 
-                                <!-- Price -->
-                                <div class="mb-4">
-                                    <p class="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent"
-                                       x-text="(product.currency || '$') + ' ' + (product.price || 'N/A')"></p>
-                                </div>
-                                
-                                <!-- Tracking Status -->
-                                <div class="mb-3">
-                                    <span x-show="product.is_tracked" class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                                        <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
-                                        </svg>
-                                        Tracking
-                                    </span>
-                                </div>
-                                
-                                <!-- Action Buttons -->
-                                <div class="flex gap-2">
-                                    <button x-show="!product.is_tracked" @click="openTrackModal(product)" 
-                                            class="flex-1 text-center py-2 px-3 rounded-xl font-semibold transition-all duration-200 transform hover:scale-105 bg-green-600 text-white hover:bg-green-700">
-                                        <svg class="w-4 h-4 mr-1 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-                                        </svg>
-                                        Track
-                                    </button>
-                                    <button x-show="product.is_tracked" @click="editTracking(product)" 
-                                            class="flex-1 text-center py-2 px-3 rounded-xl font-semibold transition-all duration-200 transform hover:scale-105 bg-blue-600 text-white hover:bg-blue-700">
-                                        <svg class="w-4 h-4 mr-1 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-                                        </svg>
-                                        Edit
-                                    </button>
-                                    <a :href="product.url" target="_blank" 
-                                       class="flex-1 text-center py-2 px-3 rounded-xl font-semibold transition-all duration-200 transform hover:scale-105"
-                                       :class="darkMode ? 'bg-purple-600 text-white hover:bg-purple-700' : 'bg-purple-600 text-white hover:bg-purple-700'">
-                                        View
-                                    </a>
-                                </div>
+                                <button @click="openTrackingModal(product)" 
+                                        class="flex items-center gap-1 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg text-sm font-medium hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+                                    </svg>
+                                    Track
+                                </button>
+                            </div>
+                            
+                            <!-- Action Buttons -->
+                            <div class="flex gap-2 pt-3 border-t" :class="darkMode ? 'border-slate-700' : 'border-gray-200'">
+                                <!-- View Button -->
+                                <a :href="product.url" target="_blank" rel="noopener noreferrer"
+                                   class="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-white dark:bg-slate-800 rounded-lg border hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors text-sm font-medium text-gray-700 dark:text-gray-300">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+                                    </svg>
+                                    View
+                                </a>
                             </div>
                         </div>
-                    </template>
-                </div>
-                
-                <!-- List View -->
-                <div x-show="viewMode === 'list'" class="space-y-4">
-                    <template x-for="product in products" :key="product.product_id">
-                        <div class="product-card rounded-2xl overflow-hidden shadow-lg"
-                             :class="darkMode ? 'bg-slate-800 border border-slate-700' : 'bg-white border border-gray-200'">
-                            <div class="flex flex-col md:flex-row">
-                                <!-- Product Image -->
-                                <div class="md:w-48 h-48 bg-gradient-to-br from-purple-100 to-indigo-100 dark:from-slate-700 dark:to-slate-600 flex-shrink-0">
-                                    <img x-show="product.image" :src="product.image" 
-                                         class="w-full h-full object-contain p-4" 
-                                         :alt="product.title">
-                                    <div x-show="!product.image" class="flex items-center justify-center h-full">
-                                        <svg class="w-16 h-16 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                                        </svg>
-                                    </div>
-                                </div>
-                                
-                                <!-- Product Info -->
-                                <div class="flex-1 p-6 flex flex-col justify-between">
-                                    <div>
-                                        <div class="flex items-start justify-between mb-2">
-                                            <div class="flex-1">
-                                                <h3 class="font-bold text-xl mb-1" 
-                                                    :class="darkMode ? 'text-white' : 'text-gray-900'"
-                                                    x-text="product.title"></h3>
-                                                <p class="text-sm" 
-                                                   :class="darkMode ? 'text-gray-400' : 'text-gray-600'"
-                                                   x-text="product.brand || 'No brand'"></p>
-                                            </div>
-                                            <span x-show="product.status_badge" class="ml-4 px-3 py-1 rounded-full text-xs font-bold flex-shrink-0"
-                                                  :class="getStatusBadgeClass(product.status_badge)"
-                                                  x-text="product.status_badge"></span>
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="flex items-center justify-between mt-4">
-                                        <div>
-                                            <p class="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent"
-                                               x-text="(product.currency || '$') + ' ' + (product.price || 'N/A')"></p>
-                                            <span x-show="product.is_tracked" class="inline-flex items-center mt-2 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                                                <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
-                                                </svg>
-                                                Tracking
-                                            </span>
-                                        </div>
-                                        <div class="flex gap-2">
-                                            <button x-show="!product.is_tracked" @click="openTrackModal(product)" 
-                                                    class="py-2 px-4 rounded-xl font-semibold transition-all duration-200 transform hover:scale-105 bg-green-600 text-white hover:bg-green-700">
-                                                Track
-                                            </button>
-                                            <button x-show="product.is_tracked" @click="editTracking(product)" 
-                                                    class="py-2 px-4 rounded-xl font-semibold transition-all duration-200 transform hover:scale-105 bg-blue-600 text-white hover:bg-blue-700">
-                                                Edit
-                                            </button>
-                                            <a :href="product.url" target="_blank" 
-                                               class="py-2 px-4 rounded-xl font-semibold transition-all duration-200 transform hover:scale-105"
-                                               :class="darkMode ? 'bg-purple-600 text-white hover:bg-purple-700' : 'bg-purple-600 text-white hover:bg-purple-700'">
-                                                View
-                                            </a>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </template>
-                </div>
+                    </div>
+                </template>
             </div>
-            
+
+            <!-- Pagination Controls -->
+            <div class="mt-8 flex items-center justify-between" x-show="totalPages > 1">
+                <button @click="goToPage(currentPage - 1)"
+                        :disabled="currentPage <= 1 || isLoading"
+                        class="px-4 py-2 rounded-lg border text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        :class="darkMode ? 'border-slate-600 text-gray-300 hover:bg-slate-800' : 'border-gray-300 text-gray-700 hover:bg-gray-100'">
+                    Previous
+                </button>
+
+                <div class="text-sm text-gray-600 dark:text-gray-400">
+                    Page <span class="font-semibold" x-text="currentPage"></span> of <span class="font-semibold" x-text="totalPages"></span>
+                </div>
+
+                <button @click="goToPage(currentPage + 1)"
+                        :disabled="currentPage >= totalPages || isLoading"
+                        class="px-4 py-2 rounded-lg border text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        :class="darkMode ? 'border-slate-600 text-gray-300 hover:bg-slate-800' : 'border-gray-300 text-gray-700 hover:bg-gray-100'">
+                    Next
+                </button>
+            </div>
+
             <!-- Empty State -->
-            <div x-show="products.length === 0" class="text-center py-16 animate-fade-in">
-                <svg class="mx-auto h-24 w-24 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div x-show="!isLoading && filteredProducts.length === 0" class="text-center py-16">
+                <svg class="mx-auto h-16 w-16 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
                 </svg>
-                <h3 class="mt-4 text-xl font-semibold" :class="darkMode ? 'text-gray-300' : 'text-gray-900'">No products found</h3>
-                <p class="mt-2" :class="darkMode ? 'text-gray-400' : 'text-gray-600'">Try adjusting your search or filters</p>
-            </div>
-
-            <!-- Pagination -->
-            <div x-show="totalPages > 1" class="mt-8 flex justify-between items-center animate-fade-in">
-                <button @click="prevPage()" :disabled="page === 1" 
-                        class="px-6 py-3 rounded-xl font-semibold transition-all duration-200 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-                        :class="darkMode ? 'bg-slate-800 text-white hover:bg-slate-700' : 'bg-white text-gray-700 hover:bg-gray-50 border-2 border-gray-300'">
-                    <div class="flex items-center">
-                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
-                        </svg>
-                        Previous
-                    </div>
-                </button>
-                
-                <div class="flex items-center space-x-2">
-                    <span class="px-4 py-2 rounded-xl font-semibold" 
-                          :class="darkMode ? 'bg-slate-800 text-white' : 'bg-white text-gray-700 border-2 border-gray-300'">
-                        Page <span x-text="page"></span> of <span x-text="totalPages"></span>
-                    </span>
-                </div>
-                
-                <button @click="nextPage()" :disabled="page >= totalPages" 
-                        class="px-6 py-3 rounded-xl font-semibold transition-all duration-200 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-                        :class="darkMode ? 'bg-slate-800 text-white hover:bg-slate-700' : 'bg-white text-gray-700 hover:bg-gray-50 border-2 border-gray-300'">
-                    <div class="flex items-center">
-                        Next
-                        <svg class="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-                        </svg>
-                    </div>
-                </button>
-            </div>
-        </div>
-
-        <!-- Track Product Modal -->
-        <div x-show="trackModalOpen" class="fixed z-50 inset-0 overflow-y-auto" style="display: none;">
-    <div class="flex items-center justify-center min-h-screen px-4">
-        <div class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm transition-opacity" @click="trackModalOpen = false"></div>
-        <div class="relative rounded-2xl overflow-hidden shadow-2xl transform transition-all max-w-lg w-full z-20 animate-slide-in"
-             :class="darkMode ? 'bg-slate-800' : 'bg-white'">
-            <div class="gradient-bg p-6">
-                <h3 class="text-2xl font-bold text-white flex items-center">
-                    <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-                    </svg>
-                    Track Product
-                </h3>
-            </div>
-            <div class="p-6">
-                <div x-show="selectedProduct" class="mb-6 p-4 rounded-xl bg-gray-50 dark:bg-slate-700">
-                    <div class="flex items-center space-x-3">
-                        <img x-show="selectedProduct.image" :src="selectedProduct.image" 
-                             :alt="selectedProduct.title" 
-                             class="w-12 h-12 rounded-lg object-contain bg-white dark:bg-slate-600 p-2">
-                        <div x-show="!selectedProduct.image" class="w-12 h-12 rounded-lg bg-gray-200 dark:bg-slate-600 flex items-center justify-center">
-                            <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                            </svg>
-                        </div>
-                        <div class="flex-1">
-                            <h4 class="font-semibold text-gray-900 dark:text-white truncate" x-text="selectedProduct.title"></h4>
-                            <p class="text-sm text-gray-600 dark:text-gray-400" x-text="'$' + (selectedProduct.price || '0.00')"></p>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium mb-2" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">Priority</label>
-                        <select x-model="trackForm.priority" 
-                                class="w-full px-4 py-3 rounded-xl border-2 transition-colors duration-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                :class="darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-300 text-gray-900'">
-                            <option value="normal">Normal</option>
-                            <option value="moderate">Moderate</option>
-                            <option value="urgent">Urgent</option>
-                        </select>
-                    </div>
-                    
-                    <div>
-                        <label class="block text-sm font-medium mb-2" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">Check Every (hours)</label>
-                        <input x-model="trackForm.crawl_period_hours" type="number" min="1" max="168" 
-                               class="w-full px-4 py-3 rounded-xl border-2 transition-colors duration-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                               :class="darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-300 text-gray-900'">
-                    </div>
-                    
-                    <div>
-                        <label class="block text-sm font-medium mb-2" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">Price Alert Condition (Optional)</label>
-                        <div class="flex gap-2">
-                            <select x-model="trackForm.price_condition" 
-                                    class="flex-1 px-4 py-3 rounded-xl border-2 transition-colors duration-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                    :class="darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-300 text-gray-900'">
-                                <option value="">No alert</option>
-                                <option value="greater_than">Price above</option>
-                                <option value="less_than">Price below</option>
-                                <option value="equal_to">Price equals</option>
-                            </select>
-                            <input x-model="trackForm.price_threshold" type="number" step="0.01" min="0" 
-                                   x-show="trackForm.price_condition"
-                                   placeholder="Amount"
-                                   class="flex-1 px-4 py-3 rounded-xl border-2 transition-colors duration-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                   :class="darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-300 text-gray-900'">
-                        </div>
-                    </div>
-                    
-                    <div>
-                        <label class="block text-sm font-medium mb-2" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">Discord Webhook URL (Optional)</label>
-                        <input x-model="trackForm.discord_webhook_url" type="url" 
-                               placeholder="https://discord.com/api/webhooks/..." 
-                               class="w-full px-4 py-3 rounded-xl border-2 transition-colors duration-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                               :class="darkMode ? 'bg-slate-700 border-slate-600 text-white placeholder-gray-400' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'">
-                    </div>
-                </div>
-            </div>
-            <div class="px-6 py-4 flex justify-end space-x-3" :class="darkMode ? 'bg-slate-900' : 'bg-gray-50'">
-                <button @click="trackModalOpen = false" 
-                        class="px-6 py-2 rounded-lg font-medium transition-all duration-200 transform hover:scale-105"
-                        :class="darkMode ? 'bg-slate-700 text-gray-300 hover:bg-slate-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'">
-                    Cancel
-                </button>
-                <button @click="trackProduct()" 
-                        class="gradient-bg text-white px-6 py-2 rounded-lg font-medium shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200">
-                    Start Tracking
-                </button>
+                <h3 class="mt-4 text-lg font-semibold text-gray-900 dark:text-white">No products found</h3>
+                <p class="mt-2 text-gray-600 dark:text-gray-400">Try adjusting your filters</p>
             </div>
         </div>
     </div>
+
+    <!-- Advanced Tracking Modal -->
+    <div x-show="showTrackingModal" class="fixed z-50 inset-0 overflow-y-auto" style="display: none;">
+        <div class="flex items-center justify-center min-h-screen px-4 py-8">
+            <div class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm" @click="showTrackingModal = false"></div>
+            <div class="relative rounded-2xl overflow-hidden shadow-2xl transform transition-all max-w-2xl w-full z-20"
+                 :class="darkMode ? 'bg-slate-800' : 'bg-white'">
+                <div class="gradient-bg p-6">
+                    <h3 class="text-2xl font-bold text-white">Track Product</h3>
+                    <p class="text-indigo-100 text-sm mt-1" x-text="trackingProduct?.title"></p>
+                </div>
+                
+                <div class="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+                    <!-- Tracking Filters -->
+                    <div>
+                        <!-- Tracking Conditions -->
+                        <h4 class="text-lg font-semibold mb-4" :class="darkMode ? 'text-white' : 'text-gray-900'">
+                            Tracking Conditions
+                        </h4>
+                        
+                        <!-- Last Price (if available) -->
+                        <div x-show="trackingProduct?.price_previous" class="mb-4 p-3 rounded-lg bg-gray-100 dark:bg-slate-700">
+                            <label class="block text-xs font-medium mb-1" :class="darkMode ? 'text-gray-400' : 'text-gray-500'">
+                                Last Price
+                            </label>
+                            <span class="text-lg font-semibold line-through" :class="darkMode ? 'text-gray-400' : 'text-gray-500'"
+                                  x-text="'$' + trackingProduct?.price_previous"></span>
+                        </div>
+                        
+                        <!-- Price Change Direction -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium mb-3" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">
+                                Price Alert
+                            </label>
+                            
+                            <div class="flex items-stretch gap-0 rounded-lg overflow-hidden border" :class="darkMode ? 'border-slate-600' : 'border-gray-300'">
+                                <!-- Current Price Display -->
+                                <div class="flex-1 px-4 py-3 flex flex-col justify-center" :class="darkMode ? 'bg-slate-800' : 'bg-gray-50'">
+                                    <span class="text-xs" :class="darkMode ? 'text-gray-400' : 'text-gray-500'">Current Price</span>
+                                    <span class="text-xl font-bold" :class="darkMode ? 'text-white' : 'text-gray-900'">
+                                        $<span x-text="trackingProduct?.price_current || '0.00'"></span>
+                                    </span>
+                                </div>
+                                
+                                <!-- Increase Button -->
+                                <button @click="trackingFilters.priceDirection = trackingFilters.priceDirection === 'above' ? '' : 'above'" 
+                                        class="px-4 py-3 flex flex-col items-center justify-center gap-1 transition-colors border-l"
+                                        :class="trackingFilters.priceDirection === 'above' 
+                                            ? 'bg-green-500 text-white border-green-500' 
+                                            : (darkMode ? 'bg-slate-700 text-gray-300 border-slate-600 hover:bg-slate-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100')">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                                    </svg>
+                                    <span class="text-xs font-medium">Increase</span>
+                                </button>
+                                
+                                <!-- Decrease Button -->
+                                <button @click="trackingFilters.priceDirection = trackingFilters.priceDirection === 'below' ? '' : 'below'" 
+                                        class="px-4 py-3 flex flex-col items-center justify-center gap-1 transition-colors border-l"
+                                        :class="trackingFilters.priceDirection === 'below' 
+                                            ? 'bg-red-500 text-white border-red-500' 
+                                            : (darkMode ? 'bg-slate-700 text-gray-300 border-slate-600 hover:bg-slate-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100')">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"></path>
+                                    </svg>
+                                    <span class="text-xs font-medium">Decrease</span>
+                                </button>
+                            </div>
+                            
+                            <p class="mt-2 text-xs" :class="darkMode ? 'text-gray-400' : 'text-gray-500'">
+                                <span x-show="trackingFilters.priceDirection === 'above'">Alert when price goes above current price</span>
+                                <span x-show="trackingFilters.priceDirection === 'below'">Alert when price drops below current price</span>
+                                <span x-show="!trackingFilters.priceDirection">Select Increase or Decrease to set price alerts</span>
+                            </p>
+                        </div>
+                        
+                        <!-- Product Info Display (from product fields) -->
+                        <div class="mb-4 p-3 rounded-lg border" :class="darkMode ? 'bg-slate-700 border-slate-600' : 'bg-gray-50 border-gray-200'">
+                            <h5 class="text-sm font-semibold mb-2" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">
+                                Product Details
+                            </h5>
+                            <div class="space-y-1 text-sm">
+                                <div x-show="trackingProduct?.gender" class="flex justify-between">
+                                    <span :class="darkMode ? 'text-gray-400' : 'text-gray-500'">Gender:</span>
+                                    <span class="font-medium capitalize" x-text="trackingProduct?.gender"></span>
+                                </div>
+                                <div x-show="trackingProduct?.color" class="flex justify-between">
+                                    <span :class="darkMode ? 'text-gray-400' : 'text-gray-500'">Color:</span>
+                                    <span class="font-medium" x-text="trackingProduct?.color"></span>
+                                </div>
+                                <div x-show="trackingProduct?.category" class="flex justify-between">
+                                    <span :class="darkMode ? 'text-gray-400' : 'text-gray-500'">Category:</span>
+                                    <span class="font-medium" x-text="trackingProduct?.category"></span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Sizes Selection (from product data) -->
+                        <div x-show="trackingProduct?.sizes?.length > 0" class="mb-4">
+                            <label class="block text-sm font-medium mb-2" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">
+                                Select Sizes to Track
+                            </label>
+                            <p class="text-xs mb-2" :class="darkMode ? 'text-gray-400' : 'text-gray-500'">
+                                Click to select specific sizes, or leave all unselected to track all sizes
+                            </p>
+                            <div class="flex flex-wrap gap-2">
+                                <template x-for="size in trackingProduct?.sizes || []" :key="size">
+                                    <button @click="toggleSize(size)"
+                                            class="px-3 py-1 text-xs rounded-full border transition-colors"
+                                            :class="trackingFilters.selectedSizes?.includes(size) 
+                                                ? 'bg-indigo-500 text-white border-indigo-500' 
+                                                : (darkMode ? 'bg-slate-700 text-gray-300 border-slate-600 hover:bg-slate-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100')"
+                                            x-text="size"></button>
+                                </template>
+                            </div>
+                        </div>
+                        
+                        <!-- Availability -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium mb-2" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">
+                                Availability
+                            </label>
+                            <select x-model="trackingFilters.availability" 
+                                    class="w-full px-4 py-2 rounded-lg border"
+                                    :class="darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-300 text-gray-900'">
+                                <option value="">Any</option>
+                                <option value="InStock">In Stock Only</option>
+                                <option value="OutOfStock">Out of Stock Only</option>
+                                <option value="LowStock">Low Stock Only</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Priority with Time Indicators -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium mb-2" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">
+                                Priority
+                            </label>
+                            <select x-model="trackingFilters.priority" 
+                                    class="w-full px-4 py-2 rounded-lg border"
+                                    :class="darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-300 text-gray-900'">
+                                <option value="now">⚡ Instant (Now)</option>
+                                <option value="urgent">🔴 Urgent (~5 min)</option>
+                                <option value="high">🟠 High (~15 min)</option>
+                                <option value="moderate">🟡 Moderate (~30 min)</option>
+                                <option value="normal">🟢 Normal (~1 hour)</option>
+                            </select>
+                            <p class="mt-1 text-xs" :class="darkMode ? 'text-gray-400' : 'text-gray-500'">
+                                Estimated check interval based on priority
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="px-6 py-4 flex justify-end space-x-3" :class="darkMode ? 'bg-slate-900' : 'bg-gray-50'">
+                    <button @click="showTrackingModal = false"
+                            class="px-6 py-2 rounded-lg font-medium transition-colors"
+                            :class="darkMode ? 'bg-slate-700 text-gray-300 hover:bg-slate-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'">
+                        Cancel
+                    </button>
+                    <button @click="saveTracking()"
+                            class="bg-indigo-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-indigo-700 transition-colors">
+                        Start Tracking
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Task Modal -->
+    <div x-show="showTaskModal" class="fixed z-50 inset-0 overflow-y-auto" style="display: none;">
+        <div class="flex items-center justify-center min-h-screen px-4 py-8">
+            <div class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm" @click="showTaskModal = false"></div>
+            <div class="relative rounded-2xl overflow-hidden shadow-2xl transform transition-all max-w-lg w-full z-20"
+                 :class="darkMode ? 'bg-slate-800' : 'bg-white'">
+                <div class="gradient-bg p-6">
+                    <h3 class="text-2xl font-bold text-white">Create Task</h3>
+                    <p class="text-indigo-100 text-sm mt-1" x-text="taskProduct?.title"></p>
+                </div>
+                
+                <div class="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+                    <!-- Task Title -->
+                    <div>
+                        <label class="block text-sm font-medium mb-2" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">
+                            Task Title
+                        </label>
+                        <input x-model="taskData.title" 
+                               type="text" 
+                               class="w-full px-4 py-2 rounded-lg border"
+                               :class="darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-300 text-gray-900'">
+                    </div>
+                    
+                    <!-- Task Description -->
+                    <div>
+                        <label class="block text-sm font-medium mb-2" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">
+                            Description
+                        </label>
+                        <textarea x-model="taskData.description" 
+                                  rows="3"
+                                  class="w-full px-4 py-2 rounded-lg border"
+                                  :class="darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-300 text-gray-900'"></textarea>
+                    </div>
+                    
+                    <!-- Due Date -->
+                    <div>
+                        <label class="block text-sm font-medium mb-2" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">
+                            Due Date
+                        </label>
+                        <input x-model="taskData.due_date" 
+                               type="datetime-local" 
+                               class="w-full px-4 py-2 rounded-lg border"
+                               :class="darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-300 text-gray-900'">
+                    </div>
+                    
+                    <!-- Priority -->
+                    <div>
+                        <label class="block text-sm font-medium mb-2" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">
+                            Priority
+                        </label>
+                        <select x-model="taskData.priority" 
+                                class="w-full px-4 py-2 rounded-lg border"
+                                :class="darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-300 text-gray-900'">
+                            <option value="low">Low</option>
+                            <option value="normal">Normal</option>
+                            <option value="high">High</option>
+                            <option value="urgent">Urgent</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="px-6 py-4 flex justify-end space-x-3" :class="darkMode ? 'bg-slate-900' : 'bg-gray-50'">
+                    <button @click="showTaskModal = false"
+                            class="px-6 py-2 rounded-lg font-medium transition-colors"
+                            :class="darkMode ? 'bg-slate-700 text-gray-300 hover:bg-slate-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'">
+                        Cancel
+                    </button>
+                    <button @click="saveTask()"
+                            class="bg-indigo-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-indigo-700 transition-colors">
+                        Create Task
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
 <script>
     function products() {
         return {
-            products: [],
+            allProducts: [],
+            filteredProducts: [],
             websites: [],
-            websiteFilter: '',
-            searchQuery: '',
-            sortBy: 'modified_desc',
-            page: 1,
-            totalPages: 1,
-            viewMode: localStorage.getItem('productsViewMode') || 'grid',
             darkMode: localStorage.getItem('darkMode') === 'true',
-            trackModalOpen: false,
-            selectedProduct: null,
-            trackForm: {
-                priority: 'normal',
-                crawl_period_hours: 24,
-                price_condition: '',
-                price_threshold: '',
-                discord_webhook_url: ''
+            searchQuery: '',
+            websiteFilter: '',
+            genderFilter: '',
+            availabilityFilter: '',
+            sortBy: 'updated_desc',
+            activeFilters: [],
+            currentPage: 1,
+            totalPages: 1,
+            totalProducts: 0,
+            perPage: 48,
+            isLoading: false,
+            searchDebounceTimer: null,
+            showTrackingModal: false,
+            trackingProduct: null,
+            trackingFilters: {
+                gender: '',
+                selectedSizes: [],
+                priceDirection: '',  // 'above' or 'below'
+                availability: '',
+                priority: 'normal'
             },
+            showTaskModal: false,
+            taskProduct: null,
+            taskData: {
+                title: '',
+                description: '',
+                due_date: '',
+                priority: 'normal'
+            },
+            
             async init() {
                 const token = localStorage.getItem('access_token');
                 if (!token) {
                     window.location.href = '/login';
                     return;
                 }
-                await Promise.all([this.loadWebsites(), this.loadProducts()]);
+                
+                await this.loadWebsites();
+                await this.loadProducts();
             },
+            
             async loadWebsites() {
                 const token = localStorage.getItem('access_token');
                 try {
-                    const res = await fetch('/api/websites', { headers: { 'Authorization': 'Bearer ' + token } });
-                    if (res.ok) this.websites = await res.json();
-                } catch (e) { console.error('Failed to load websites', e); }
-            },
-            async loadProducts() {
-                const token = localStorage.getItem('access_token');
-                const params = new URLSearchParams({
-                    q: this.searchQuery,
-                    sort: this.sortBy,
-                    page: this.page,
-                    page_size: 20
-                });
-                if (this.websiteFilter) params.set('website_id', this.websiteFilter);
-                const response = await fetch('/api/search?' + params, {
-                    headers: {
-                        'Authorization': 'Bearer ' + token
-                    }
-                });
-                if (response.ok) {
-                    const data = await response.json();
-                    this.products = data.results;
-                    this.totalPages = data.pages;
-                    
-                    // Check which products are being tracked
-                    await this.checkTrackingStatus();
-                } else if (response.status === 401) {
-                    localStorage.removeItem('access_token');
-                    localStorage.removeItem('refresh_token');
-                    window.location.href = '/login';
-                }
-            },
-            async checkTrackingStatus() {
-                const token = localStorage.getItem('access_token');
-                try {
-                    const response = await fetch('/api/tracked-products', {
+                    const response = await fetch('/api/websites', {
                         headers: { 'Authorization': 'Bearer ' + token }
                     });
                     if (response.ok) {
-                        const trackedProducts = await response.json();
-                        const trackedIds = new Set(trackedProducts.map(tp => tp.product_id));
-                        // Rebuild array so Alpine detects changes reactively
-                        this.products = this.products.map(p => ({
-                            ...p,
-                            is_tracked: trackedIds.has(p.product_id)
-                        }));
+                        this.websites = await response.json();
                     }
                 } catch (error) {
-                    console.error('Failed to check tracking status:', error);
+                    console.error('Failed to load websites:', error);
                 }
             },
-            getStatusBadgeClass(badge) {
-                if (badge === 'SALE') return 'bg-orange-500/90 text-white';
-                if (badge === 'NEW') return 'bg-blue-500/90 text-white';
-                if (badge === 'CLEARANCE') return 'bg-pink-500/90 text-white';
-                if (badge === 'LIMITED') return 'bg-purple-500/90 text-white';
-                if (badge === 'BACK') return 'bg-green-500/90 text-white';
-                if (badge === 'OUT') return 'bg-red-500/90 text-white';
-                return 'bg-gray-500/90 text-white';
-            },
-            openTrackModal(product) {
-                this.selectedProduct = product;
-                this.trackForm = {
-                    priority: 'normal',
-                    crawl_period_hours: 24,
-                    price_condition: '',
-                    price_threshold: '',
-                    discord_webhook_url: ''
-                };
-                this.trackModalOpen = true;
-                console.log('open log button')
-            },
-            async trackProduct() {
+            
+            async loadProducts() {
                 const token = localStorage.getItem('access_token');
                 try {
-                    const response = await fetch('/api/tracked-products', {
+                    this.isLoading = true;
+
+                    let sortBy = 'updated_at';
+                    let sortOrder = 'desc';
+                    if (this.sortBy === 'price_asc') {
+                        sortBy = 'price_current';
+                        sortOrder = 'asc';
+                    } else if (this.sortBy === 'price_desc') {
+                        sortBy = 'price_current';
+                        sortOrder = 'desc';
+                    } else if (this.sortBy === 'title_asc') {
+                        sortBy = 'title';
+                        sortOrder = 'asc';
+                    }
+
+                    const params = new URLSearchParams({
+                        page: String(this.currentPage),
+                        per_page: String(this.perPage),
+                        sort_by: sortBy,
+                        sort_order: sortOrder
+                    });
+
+                    if (this.searchQuery) params.set('search', this.searchQuery);
+                    if (this.websiteFilter) params.set('website_id', this.websiteFilter);
+                    if (this.genderFilter) params.set('gender', this.genderFilter);
+                    if (this.activeFilters.includes('is_new')) params.set('is_new', 'true');
+                    if (this.activeFilters.includes('is_on_sale')) params.set('is_on_sale', 'true');
+
+                    const response = await fetch(`/api/products?${params.toString()}`, {
+                        headers: { 'Authorization': 'Bearer ' + token }
+                    });
+
+                    if (response.status === 401) {
+                        localStorage.removeItem('access_token');
+                        window.location.href = '/login';
+                        return;
+                    }
+
+                    if (!response.ok) {
+                        throw new Error(`Failed to load products: ${response.status}`);
+                    }
+
+                    const data = await response.json();
+                    this.allProducts = data.products || [];
+                    this.totalProducts = data.total || 0;
+                    this.totalPages = data.pages || 1;
+                    this.currentPage = data.page || this.currentPage;
+                    this.filterProducts();
+                } catch (error) {
+                    console.error('Failed to load products:', error);
+                } finally {
+                    this.isLoading = false;
+                }
+            },
+
+            onSearchInput() {
+                if (this.searchDebounceTimer) {
+                    clearTimeout(this.searchDebounceTimer);
+                }
+                this.searchDebounceTimer = setTimeout(() => {
+                    this.applyFilters();
+                }, 300);
+            },
+
+            applyFilters() {
+                if (this.searchDebounceTimer) {
+                    clearTimeout(this.searchDebounceTimer);
+                    this.searchDebounceTimer = null;
+                }
+                this.currentPage = 1;
+                this.loadProducts();
+            },
+
+            goToPage(page) {
+                if (page < 1 || page > this.totalPages || page === this.currentPage || this.isLoading) {
+                    return;
+                }
+                this.currentPage = page;
+                this.loadProducts();
+            },
+            
+            filterProducts() {
+                let filtered = [...this.allProducts];
+
+                if (this.availabilityFilter && filtered.some(p => p.availability !== undefined && p.availability !== null)) {
+                    filtered = filtered.filter(p => p.availability === this.availabilityFilter);
+                }
+                
+                this.filteredProducts = filtered;
+            },
+            
+            toggleFilter(filter) {
+                const index = this.activeFilters.indexOf(filter);
+                if (index > -1) {
+                    this.activeFilters.splice(index, 1);
+                } else {
+                    this.activeFilters.push(filter);
+                }
+                this.applyFilters();
+            },
+            
+            hasActiveFilters() {
+                return this.searchQuery || this.websiteFilter || this.genderFilter || 
+                       this.availabilityFilter || this.activeFilters.length > 0;
+            },
+            
+            clearFilters() {
+                this.searchQuery = '';
+                this.websiteFilter = '';
+                this.genderFilter = '';
+                this.availabilityFilter = '';
+                this.activeFilters = [];
+                this.applyFilters();
+            },
+            
+            openTaskModal(product) {
+                this.taskProduct = product;
+                this.taskData = {
+                    title: `Check ${product.title}`,
+                    description: '',
+                    due_date: '',
+                    priority: 'normal'
+                };
+                this.showTaskModal = true;
+            },
+            
+            async saveTask() {
+                const token = localStorage.getItem('access_token');
+                try {
+                    const response = await fetch('/api/tasks', {
                         method: 'POST',
                         headers: {
                             'Authorization': 'Bearer ' + token,
                             'Content-Type': 'application/json'
                         },
                         body: JSON.stringify({
-                            product_id: this.selectedProduct.product_id,
-                            priority: this.trackForm.priority,
-                            crawl_period_hours: this.trackForm.crawl_period_hours,
-                            price_condition: this.trackForm.price_condition || null,
-                            price_threshold: this.trackForm.price_threshold || null,
-                            discord_webhook_url: this.trackForm.discord_webhook_url || null
+                            product_id: this.taskProduct.id,
+                            ...this.taskData
                         })
                     });
+                    
                     if (response.ok) {
-                        this.trackModalOpen = false;
-                        this.selectedProduct.is_tracked = true;
+                        this.showNotification('✅ Task created!', 'success');
+                        this.showTaskModal = false;
+                    } else {
+                        this.showNotification('❌ Failed to create task', 'error');
+                    }
+                } catch (error) {
+                    this.showNotification('❌ Failed to create task', error.message || 'Unknown error');
+                }
+            },
+            
+            quickTrack(product) {
+                // Quick track with default settings
+                this.trackProduct(product, {
+                    priority: 'normal',
+                    trackVariants: false
+                });
+            },
+            
+            openTrackingModal(product) {
+                // Fetch full product details to get variants/sizes
+                const token = localStorage.getItem('access_token');
+                fetch(`/api/products/${product.id}`, {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                })
+                .then(response => response.json())
+                .then(fullProduct => {
+                    console.log('Full product:', fullProduct);
+                    console.log('Variants:', fullProduct.variants);
+                    this.trackingProduct = fullProduct;
+                    // Extract sizes from variants
+                    const sizes = fullProduct.variants && fullProduct.variants.length > 0
+                        ? [...new Set(fullProduct.variants.map(v => v.size).filter(s => s && s.trim()))]
+                        : [];
+                    console.log('Extracted sizes:', sizes);
+                    // Use Vue.set equivalent for Alpine reactivity
+                    this.trackingProduct = { ...this.trackingProduct, sizes: sizes };
+                    
+                    this.trackingFilters = {
+                        gender: fullProduct.gender || '',
+                        selectedSizes: [],
+                        priceDirection: '',
+                        availability: '',
+                        priority: 'normal'
+                    };
+                    this.showTrackingModal = true;
+                })
+                .catch(error => {
+                    console.error('Failed to load product details:', error);
+                    // Fallback to basic product info
+                    this.trackingProduct = { ...product, sizes: [] };
+                    this.trackingFilters = {
+                        gender: product.gender || '',
+                        selectedSizes: [],
+                        priceDirection: '',
+                        availability: '',
+                        priority: 'normal'
+                    };
+                    this.showTrackingModal = true;
+                });
+            },
+            
+            toggleSize(size) {
+                const index = this.trackingFilters.selectedSizes.indexOf(size);
+                if (index > -1) {
+                    this.trackingFilters.selectedSizes.splice(index, 1);
+                } else {
+                    this.trackingFilters.selectedSizes.push(size);
+                }
+            },
+            
+            async saveTracking() {
+                await this.trackProduct(this.trackingProduct, this.trackingFilters);
+                this.showTrackingModal = false;
+            },
+            
+            async trackProduct(product, filters) {
+                const token = localStorage.getItem('access_token');
+                try {
+                    // Build request body with price direction
+                    const body = {
+                        product_id: product.id,
+                        priority: filters.priority,
+                        price_direction: filters.priceDirection || null,
+                        size_filter: filters.selectedSizes && filters.selectedSizes.length > 0 
+                            ? filters.selectedSizes 
+                            : null
+                    };
+                    
+                    const response = await fetch('/api/tracked-products', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': 'Bearer ' + token,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(body)
+                    });
+                    
+                    if (response.ok) {
                         this.showNotification('✅ Product tracking started!', 'success');
                     } else {
                         const error = await response.json();
-                        const errorMsg = typeof error.error === 'object' 
-                            ? JSON.stringify(error.error) 
-                            : (error.error || 'Unknown error');
-                        this.showNotification('❌ Failed to track product: ' + errorMsg, 'error');
+                        this.showNotification('❌ ' + (error.error || 'Failed to track product'), 'error');
                     }
                 } catch (error) {
-                    console.error('Failed to track product:', error);
-                    this.showNotification('❌ Failed to track product', 'error');
+                    this.showNotification('❌ Failed to track product', error.message || 'Unknown error');
                 }
             },
-            editTracking(product) {
-                // TODO: Implement edit tracking modal
-                console.log('Edit tracking for:', product);
-            },
-            showNotification(message, type = 'info') {
-                // Simple notification implementation
+            
+            showNotification(message, type = 'success') {
+                const colors = {
+                    success: 'bg-green-500',
+                    error: 'bg-red-500'
+                };
                 const notification = document.createElement('div');
-                notification.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg transform transition-all duration-300 ${
-                    type === 'success' ? 'bg-green-500 text-white' : 
-                    type === 'error' ? 'bg-red-500 text-white' : 
-                    'bg-blue-500 text-white'
-                }`;
+                notification.className = `fixed top-4 right-4 ${colors[type]} text-white px-6 py-3 rounded-lg shadow-lg z-50`;
                 notification.textContent = message;
                 document.body.appendChild(notification);
-                
-                setTimeout(() => {
-                    notification.style.opacity = '0';
-                    setTimeout(() => notification.remove(), 300);
-                }, 3000);
-            },
-            async search() {
-                this.page = 1;
-                await this.loadProducts();
-            },
-            async prevPage() {
-                if (this.page > 1) {
-                    this.page--;
-                    await this.loadProducts();
-                }
-            },
-            async nextPage() {
-                if (this.page < this.totalPages) {
-                    this.page++;
-                    await this.loadProducts();
-                }
+                setTimeout(() => notification.remove(), 3000);
             }
         }
     }
 </script>
-{% endblock content %}
+{% endblock %}

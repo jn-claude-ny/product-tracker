@@ -13,6 +13,6 @@ class SelectorSchema(Schema):
 
 class SelectorCreateSchema(Schema):
     field_name = fields.Str(required=True, validate=validate.Length(min=1, max=100))
-    selector_type = fields.Str(missing='css', validate=validate.OneOf(['css', 'xpath']))
+    selector_type = fields.Str(load_default='css', validate=validate.OneOf(['css', 'xpath']))
     selector_value = fields.Str(required=True, validate=validate.Length(min=1))
     post_process = fields.Str(allow_none=True)

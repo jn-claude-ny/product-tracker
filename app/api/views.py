@@ -20,12 +20,12 @@ def register():
 
 @bp.route('/dashboard')
 def dashboard():
-    return render_template('dashboard_v2.html')
+    return render_template('dashboard.html')
 
 
 @bp.route('/products')
 def products():
-    return render_template('products_v2.html')
+    return render_template('products.html')
 
 
 @bp.route('/alerts')

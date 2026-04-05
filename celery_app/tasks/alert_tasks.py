@@ -170,6 +170,115 @@ def _compute_state_hash(rule_id: int, snapshot: ProductSnapshot) -> str:
 
 
 @celery.task(bind=True, max_retries=3)
+def evaluate_tracked_product_alerts(self, product_id, snapshot_id):
+    """Evaluate alerts for tracked products with price direction tracking."""
+    logger.info(f'Evaluating tracked product alerts for {product_id}, snapshot {snapshot_id}')
+    
+    try:
+        from app import create_app
+        app = create_app()
+        
+        with app.app_context():
+            from app.models.tracked_product import TrackedProduct
+            
+            product = Product.query.get(product_id)
+            if not product:
+                logger.error(f'Product {product_id} not found')
+                return {'status': 'error', 'message': 'Product not found'}
+            
+            current_snapshot = ProductSnapshot.query.get(snapshot_id)
+            if not current_snapshot:
+                logger.error(f'Snapshot {snapshot_id} not found')
+                return {'status': 'error', 'message': 'Snapshot not found'}
+            
+            # Get all tracked products for this product
+            tracked_products = TrackedProduct.query.filter_by(product_id=product_id).all()
+            
+            alerts_created = 0
+            
+            for tracked in tracked_products:
+                alert_type = None
+                
+                # Check price direction tracking
+                if tracked.price_direction and tracked.price_reference and current_snapshot.price:
+                    current_price = float(current_snapshot.price)
+                    ref_price = float(tracked.price_reference)
+                    
+                    if tracked.price_direction == 'above' and current_price > ref_price:
+                        alert_type = 'price_increase'
+                    elif tracked.price_direction == 'below' and current_price < ref_price:
+                        alert_type = 'price_drop'
+                
+                # Check availability
+                if not alert_type and tracked.availability_filter:
+                    current_avail = (current_snapshot.availability or '').lower()
+                    if tracked.availability_filter.lower() in current_avail:
+                        alert_type = 'availability_match'
+                
+                # Check size filter
+                if not alert_type and tracked.size_filter and current_snapshot.size_data:
+                    # Size-based alerting would require size-specific data in snapshot
+                    pass
+                
+                if alert_type:
+                    # Check cooldown
+                    if _is_tracked_product_in_cooldown(tracked, product, alert_type, current_snapshot):
+                        continue
+                    
+                    state_hash = _compute_tracked_state_hash(tracked.id, current_snapshot)
+                    
+                    alert = Alert(
+                        user_id=tracked.user_id,
+                        product_id=product_id,
+                        alert_type=alert_type,
+                        state_hash=state_hash
+                    )
+                    db.session.add(alert)
+                    db.session.commit()
+                    
+                    send_discord_alert.apply_async(
+                        args=[alert.id],
+                        queue='alert_queue'
+                    )
+                    
+                    alerts_created += 1
+            
+            return {
+                'status': 'success',
+                'alerts_created': alerts_created
+            }
+            
+    except Exception as e:
+        logger.error(f'Error evaluating tracked product alerts: {e}')
+        raise
+
+
+def _is_tracked_product_in_cooldown(tracked_product, product, alert_type, snapshot):
+    """Check if alert is in cooldown for tracked product."""
+    from app.models.website import Website
+    website = Website.query.get(product.website_id)
+    
+    state_hash = _compute_tracked_state_hash(tracked_product.id, snapshot)
+    cooldown_minutes = website.alert_cooldown_minutes if website else 60
+    cutoff_time = datetime.utcnow() - timedelta(minutes=cooldown_minutes)
+    
+    existing_alert = Alert.query.filter(
+        Alert.product_id == product.id,
+        Alert.alert_type == alert_type,
+        Alert.state_hash == state_hash,
+        Alert.sent_at >= cutoff_time
+    ).first()
+    
+    return existing_alert is not None
+
+
+def _compute_tracked_state_hash(tracked_product_id, snapshot):
+    """Compute state hash for tracked product alert."""
+    hash_string = f"tp:{tracked_product_id}:{snapshot.price}:{snapshot.availability}"
+    return hashlib.sha256(hash_string.encode()).hexdigest()
+
+
+@celery.task(bind=True, max_retries=3)
 def send_discord_alert(self, alert_id):
     logger.info(f'Sending Discord alert {alert_id}')
     

@@ -114,21 +114,21 @@ class WebsiteCreateSchema(Schema):
 
     base_url = fields.Str(required=True, validate=validate.Length(min=1, max=512))
 
-    allowed_domains = fields.List(fields.Str(), missing=[])
+    allowed_domains = fields.List(fields.Str(), load_default=[])
 
     sitemap_url = fields.Str(required=True, validate=validate.Length(min=1, max=512))
 
-    use_playwright = fields.Bool(missing=False)
+    use_playwright = fields.Bool(load_default=False)
 
     wait_selector = fields.Str(allow_none=True)
 
-    scrape_delay_seconds = fields.Decimal(as_string=True, missing='3.0')
+    scrape_delay_seconds = fields.Decimal(as_string=True, load_default='3.0')
 
-    randomize_delay = fields.Bool(missing=True)
+    randomize_delay = fields.Bool(load_default=True)
 
     proxy_group = fields.Str(allow_none=True)
 
-    alert_cooldown_minutes = fields.Int(missing=60)
+    alert_cooldown_minutes = fields.Int(load_default=60)
 
     cron_schedule = fields.Str(allow_none=True)
 

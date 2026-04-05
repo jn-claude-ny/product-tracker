@@ -53,7 +53,7 @@ class HttpScraper:
         proxies = self.get_proxy_config()
 
         try:
-            with httpx.Client(proxies=proxies, timeout=30.0, follow_redirects=True) as client:
+            with httpx.Client(proxies=proxies, timeout=30.0, follow_redirects=True, verify=False) as client:
                 response = client.get(url, headers=headers)
                 response.raise_for_status()
                 return response.text

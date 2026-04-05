@@ -14,6 +14,71 @@ logger = logging.getLogger(__name__)
 
 
 @celery.task(bind=True, max_retries=3)
+def scrape_product(self, product_id, user_id=None):
+    """Scrape a single product and create a snapshot."""
+    logger.info(f'Scraping product {product_id}')
+    
+    try:
+        from app import create_app
+        app = create_app()
+        
+        with app.app_context():
+            product = Product.query.get(product_id)
+            if not product:
+                logger.error(f'Product {product_id} not found')
+                return {'success': False, 'error': 'Product not found'}
+            
+            website = Website.query.get(product.website_id)
+            if not website:
+                logger.error(f'Website {product.website_id} not found')
+                return {'success': False, 'error': 'Website not found'}
+            
+            scraper = ProductScraper(website)
+            data = scraper.scrape(product.url)
+            
+            if not data:
+                logger.warning(f'Failed to scrape product {product_id} at {product.url}')
+                return {'success': False, 'error': 'Scrape failed'}
+            
+            # Create snapshot
+            snapshot = ProductSnapshot(
+                product_id=product_id,
+                price=data.get('price'),
+                currency=data.get('currency', 'USD'),
+                availability=data.get('availability'),
+                title=data.get('title', product.title),
+                image=data.get('image', product.image)
+            )
+            db.session.add(snapshot)
+            
+            # Update product with latest data
+            if data.get('price'):
+                product.price_previous = product.price_current
+                product.price_current = data['price']
+            if data.get('availability'):
+                product.availability = data['availability']
+            if data.get('title'):
+                product.title = data['title']
+            if data.get('image'):
+                product.image = data['image']
+            
+            db.session.commit()
+            
+            logger.info(f'Successfully scraped product {product_id}, snapshot {snapshot.id}')
+            
+            return {
+                'success': True,
+                'product_id': product_id,
+                'snapshot_id': snapshot.id
+            }
+            
+    except Exception as e:
+        logger.exception(f'Error scraping product {product_id}: {e}')
+        self.retry(countdown=60, exc=e)
+        raise
+
+
+@celery.task(bind=True, max_retries=3)
 def scrape_product_batch(self, website_id, urls):
     logger.info(f'Scraping {len(urls)} products for website {website_id}')
     

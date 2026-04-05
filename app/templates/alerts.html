@@ -133,7 +133,7 @@
                                     </div>
                                     
                                     <!-- Action Button -->
-                                    <a :href="{{ url_for('views.alerts') }}{{ alert.product?.url }}" target="_blank" 
+                                    <a :href="alert.product?.url || '#'" target="_blank" 
                                        class="inline-flex items-center px-6 py-3 rounded-xl font-semibold transition-all duration-200 transform hover:scale-105"
                                        :class="darkMode ? 'bg-purple-600 text-white hover:bg-purple-700' : 'bg-purple-600 text-white hover:bg-purple-700'">
                                         View Product

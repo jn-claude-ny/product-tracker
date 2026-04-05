@@ -10,4 +10,4 @@ class DiscordWebhookSchema(Schema):
 
 class DiscordWebhookCreateSchema(Schema):
     webhook_url = fields.Str(required=True, validate=validate.Length(min=1, max=512))
-    is_active = fields.Bool(missing=True)
+    is_active = fields.Bool(load_default=True)

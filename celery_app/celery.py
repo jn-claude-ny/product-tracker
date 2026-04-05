@@ -10,7 +10,8 @@ celery = Celery(
         'celery_app.tasks.scrape_tasks',
         'celery_app.tasks.discovery_tasks',
         'celery_app.tasks.alert_tasks',
-        'celery_app.tasks.index_tasks'
+        'celery_app.tasks.index_tasks',
+        'celery_app.tasks.tracked_product_tasks'
     ]
 )
 
@@ -35,7 +36,20 @@ celery.conf.update(
         'celery_app.tasks.discovery_tasks.*': {'queue': 'scrape_queue'},
         'celery_app.tasks.alert_tasks.*': {'queue': 'alert_queue'},
         'celery_app.tasks.index_tasks.*': {'queue': 'index_queue'},
+        # Priority-based tracked product queues
+        'celery_app.tasks.tracked_product_tasks.trigger_tracked_product_now': {'queue': 'urgent_now'},
+        'celery_app.tasks.tracked_product_tasks.check_tracked_product_now': {'queue': 'urgent_now'},
+        'celery_app.tasks.tracked_product_tasks.check_tracked_product_urgent': {'queue': 'urgent_now'},
+        'celery_app.tasks.tracked_product_tasks.check_tracked_product_high': {'queue': 'high_priority'},
+        'celery_app.tasks.tracked_product_tasks.check_tracked_product_moderate': {'queue': 'moderate_priority'},
+        'celery_app.tasks.tracked_product_tasks.check_tracked_product_normal': {'queue': 'normal_priority'},
+        'celery_app.tasks.tracked_product_tasks.schedule_tracked_products_check': {'queue': 'urgent_now'},
     },
     beat_scheduler='celery_app.beat_scheduler:DynamicScheduler',
-    beat_schedule={}
+    beat_schedule={
+        'schedule-tracked-products': {
+            'task': 'celery_app.tasks.tracked_product_tasks.schedule_tracked_products_check',
+            'schedule': 300.0,  # Run every 5 minutes
+        },
+    }
 )

@@ -61,6 +61,7 @@ services:
       - ELASTICSEARCH_URL=http://elasticsearch:9200
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/1
+      - CORS_ORIGINS=http://localhost:8081,http://localhost:8080,http://localhost:5000
     ports:
       - "5000:5000"
     volumes:
@@ -190,11 +191,81 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # Priority-based tracked product workers
+  celery_worker_urgent_now:
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    command: celery -A celery_app.celery worker -Q urgent_now -c 2 --loglevel=info --prefetch-multiplier=1
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/product_tracker
+      - REDIS_URL=redis://redis:6379/0
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+    volumes:
+      - ./app:/app/app
+      - ./celery_app:/app/celery_app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
   celery_worker_high_priority:
     build:
       context: .
       dockerfile: docker/worker.Dockerfile
-    command: celery -A celery_app.celery worker -Q high_priority -c 2 --loglevel=info
+    command: celery -A celery_app.celery worker -Q high_priority -c 3 --loglevel=info
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/product_tracker
+      - REDIS_URL=redis://redis:6379/0
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+    volumes:
+      - ./app:/app/app
+      - ./celery_app:/app/celery_app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  celery_worker_moderate_priority:
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    command: celery -A celery_app.celery worker -Q moderate_priority -c 2 --loglevel=info
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/product_tracker
+      - REDIS_URL=redis://redis:6379/0
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+    volumes:
+      - ./app:/app/app
+      - ./celery_app:/app/celery_app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  celery_worker_normal_priority:
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    command: celery -A celery_app.celery worker -Q normal_priority -c 2 --loglevel=info
     env_file:
       - .env
     environment:
