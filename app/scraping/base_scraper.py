@@ -94,12 +94,15 @@ class BaseScraper(ABC):
             'image': raw_data.get('image') or raw_data.get('imageUrl'),
             'gender': gender,
             'category': raw_data.get('category'),
-            'color': raw_data.get('color'),
+            'color': raw_data.get('color') or raw_data.get('colour'),
             'price_current': self._extract_price(raw_data.get('price')),
             'currency': raw_data.get('currency', 'USD'),
             'is_on_sale': raw_data.get('is_on_sale', False) or raw_data.get('isOnSale', False),
             'is_new': raw_data.get('is_new', False) or raw_data.get('isNew', False),
-            'categories': raw_data.get('categories', [])
+            'categories': raw_data.get('categories', []),
+            'availability': raw_data.get('availability'),
+            'available': raw_data.get('available'),
+            'inventoryLevel': raw_data.get('inventoryLevel'),
         }
     
     def _extract_price(self, price_data) -> Optional[float]:

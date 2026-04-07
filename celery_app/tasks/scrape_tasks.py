@@ -46,34 +46,42 @@ def scrape_product(self, product_id, user_id=None):
                 logger.warning(f'No data returned for product {product_id} (sku={sku})')
                 return {'success': False, 'error': 'Scrape failed'}
 
-            # Update product fields
-            if data.get('price'):
+            # Update product-level fields only when present in response
+            # (ASOS extract_product_details returns variants-only; ShopWSS returns full product)
+            new_price = data.get('price')
+            if new_price:
                 product.price_previous = product.price_current
-                product.price_current = data['price']
+                product.price_current = new_price
+                product.last_price_change = datetime.utcnow()
             if data.get('title') or data.get('name'):
                 product.title = data.get('title') or data.get('name')
             if data.get('image') or data.get('imageUrl'):
                 product.image = data.get('image') or data.get('imageUrl')
             if data.get('brand'):
                 product.brand = data['brand']
+            if data.get('availability'):
+                product.availability = data['availability']
+            if data.get('available') is not None:
+                product.available = data['available']
+            if data.get('inventoryLevel') is not None:
+                product.inventory_level = data['inventoryLevel']
             product.last_seen = datetime.utcnow()
 
-            # Create snapshot
+            # Snapshot price: fall back to current stored price when not in response (ASOS variants-only)
+            snapshot_price = new_price or (float(product.price_current) if product.price_current else None)
             snapshot = ProductSnapshot(
                 product_id=product_id,
-                price=data.get('price'),
+                price=snapshot_price,
                 currency=data.get('currency', 'USD'),
-                availability=data.get('availability'),
+                availability=data.get('availability') or product.availability,
                 extra_data={
-                    'title': data.get('title') or data.get('name'),
-                    'image': data.get('image') or data.get('imageUrl'),
                     'inventoryLevel': data.get('inventoryLevel'),
                     'available': data.get('available'),
                 }
             )
             db.session.add(snapshot)
 
-            # Upsert variants from the refresh response
+            # Upsert variants (works for both ASOS and ShopWSS)
             if data.get('variants'):
                 from celery_app.tasks.discovery_tasks import update_product_with_details
                 update_product_with_details(product, data)

@@ -19,6 +19,7 @@ class AsosScraper(BaseScraper):
     
     SEARCH_API_URL = "https://www.asos.com/api/product/search/v2/categories/{category_id}"
     DETAIL_API_URL = "https://www.asos.com/api/product/catalogue/v4/summaries"
+    VARIANT_API_URL = "https://www.asos.com/api/product/catalogue/v4/variants"
     
     def __init__(self, website_id: int, base_url: str = "https://www.asos.com"):
         super().__init__(website_id, base_url)
@@ -119,13 +120,17 @@ class AsosScraper(BaseScraper):
     
     def extract_product_details(self, product_id: str) -> Optional[Dict]:
         """
-        Extract detailed product information including variants.
-        
+        Extract detailed product information including variants with price and availability.
+
+        Two-step process:
+        1. Fetch product summary (variant stubs: id, size, color)
+        2. Enrich each variant with price + availability via fetch_variant_details()
+
         Args:
             product_id: ASOS product ID
-            
+
         Returns:
-            Dictionary with detailed product info
+            Dictionary with detailed product info including enriched variants
         """
         try:
             params = {
@@ -135,24 +140,39 @@ class AsosScraper(BaseScraper):
                 'expand': 'variants',
                 'country': 'US'
             }
-            
-            # Rate limit to avoid overwhelming API
+
             self.rate_limit(0.5)
-            
+
             logger.debug(f"Fetching ASOS product details: {product_id}")
             response = self.session.get(self.DETAIL_API_URL, params=params, timeout=60)
             response.raise_for_status()
-            
+
             data = response.json()
-            
-            # ASOS returns an array, get first item
-            if isinstance(data, list) and len(data) > 0:
-                product_data = data[0]
-                return self._parse_detail_product(product_data)
-            
-            logger.warning(f"No details found for product {product_id}")
-            return None
-            
+
+            if not (isinstance(data, list) and len(data) > 0):
+                logger.warning(f"No details found for product {product_id}")
+                return None
+
+            parsed = self._parse_detail_product(data[0])
+            if not parsed:
+                return None
+
+            variants = parsed.get('variants', [])
+
+            # Enrich variant stubs with price + availability
+            if variants:
+                variant_ids = [v['id'] for v in variants if v.get('id')]
+                details_map = self.fetch_variant_details(variant_ids)
+
+                for variant in variants:
+                    enriched = details_map.get(variant['id'], {})
+                    variant['price'] = enriched.get('price')
+                    variant['available'] = enriched.get('available')
+                    variant['availability'] = enriched.get('availability')
+
+            parsed['variants'] = variants
+            return parsed
+
         except Exception as e:
             logger.error(f"Error fetching ASOS product details {product_id}: {e}")
             return None
@@ -167,37 +187,23 @@ class AsosScraper(BaseScraper):
             # Extract price info
             price_data = product.get('price', {})
             current_price = None
-            sale_price = None
-            
+
             if isinstance(price_data, dict):
                 current = price_data.get('current', {})
-                previous = price_data.get('previous', {})
-                
                 if isinstance(current, dict):
                     current_price = current.get('value')
-                
-                if isinstance(previous, dict):
-                    prev_value = previous.get('value')
-                    if prev_value and current_price and prev_value > current_price:
-                        sale_price = current_price
-                        current_price = prev_value
             
-            is_in_stock = product.get('isInStock', True)
             return {
                 'id': str(product_id),
                 'sku': str(product_id),
                 'name': product.get('name'),
                 'title': product.get('name'),
                 'brand': product.get('brandName'),
+                'color': product.get('colour'),
                 'url': f"https://www.asos.com/us/{product.get('url', '')}",
                 'imageUrl': f"https://{product.get('imageUrl', '').lstrip('//')}" if product.get('imageUrl') else None,
                 'image': f"https://{product.get('imageUrl', '').lstrip('//')}" if product.get('imageUrl') else None,
                 'price': current_price,
-                'salePrice': sale_price,
-                'available': is_in_stock,
-                'availability': 'InStock' if is_in_stock else 'OutOfStock',
-                'isOnSale': sale_price is not None,
-                'isNew': product.get('isNoSize', False),
                 'gender': gender
             }
             
@@ -206,60 +212,85 @@ class AsosScraper(BaseScraper):
             return None
     
     def _parse_detail_product(self, product: Dict) -> Optional[Dict]:
-        """Parse detailed product information"""
+        """Parse detailed product information — returns variant stubs (id + size + color).
+        Call fetch_variant_details() separately to enrich with price and availability."""
         try:
             variants = product.get('variants', [])
-            
-            # Extract size range
-            sizes = []
-            colors = set()
             variant_list = []
-            
+
             for variant in variants:
-                size = variant.get('size')
+                variant_id = variant.get('id')
+                if not variant_id:
+                    continue
+
                 color = variant.get('colour') or variant.get('color')
-                is_in_stock = variant.get('isInStock', False)
-                
-                if size:
-                    sizes.append(size)
-                if color:
-                    colors.add(color)
-                
-                variant_price = None
-                price_data = variant.get('price', {})
-                if isinstance(price_data, dict):
-                    current = price_data.get('current', {})
-                    if isinstance(current, dict):
-                        variant_price = current.get('value')
+                size = variant.get('brandSize') or variant.get('size')
 
                 variant_list.append({
-                    'sku': str(variant.get('variantId', '')),
+                    'id': str(variant_id),
+                    'sku': str(variant_id),
                     'size': size,
                     'color': color,
-                    'price': variant_price,
-                    'available': is_in_stock,
-                    'availability': 'InStock' if is_in_stock else 'OutOfStock',
+                    'price': None,
+                    'available': None,
+                    'availability': None,
                     'inventoryLevel': None
                 })
-            
-            # Determine size range
-            size_range = None
-            if sizes:
-                try:
-                    numeric_sizes = [float(s) for s in sizes if s and s.replace('.', '').isdigit()]
-                    if numeric_sizes:
-                        size_range = f"{min(numeric_sizes)}-{max(numeric_sizes)}"
-                except:
-                    pass
-            
-            return {
-                'variants': variant_list,
-                'size_range': size_range,
-                'color': ', '.join(sorted(colors)) if colors else None,
-                'description': product.get('description'),
-                'productCode': product.get('productCode')
-            }
-            
+
+            return {'variants': variant_list}
+
         except Exception as e:
             logger.error(f"Error parsing ASOS detail product: {e}")
             return None
+
+    def fetch_variant_details(self, variant_ids: List[str]) -> Dict[str, Dict]:
+        """Fetch price and availability for a list of variant IDs.
+
+        Returns a dict keyed by variant ID with 'price' and 'available' values.
+        """
+        if not variant_ids:
+            return {}
+
+        try:
+            params = {
+                'store': 'US',
+                'variantIds': ','.join(str(v) for v in variant_ids),
+                'lang': 'en-US',
+                'expand': 'variants',
+                'country': 'US'
+            }
+
+            self.rate_limit(0.5)
+            logger.debug(f"Fetching ASOS variant details for {len(variant_ids)} variants")
+            response = self.session.get(self.VARIANT_API_URL, params=params, timeout=60)
+            response.raise_for_status()
+
+            data = response.json()
+            result = {}
+
+            items = data if isinstance(data, list) else data.get('variants', [])
+            for item in items:
+                vid = str(item.get('variantId') or item.get('id', ''))
+                if not vid:
+                    continue
+
+                price = None
+                price_data = item.get('price', {})
+                if isinstance(price_data, dict):
+                    current = price_data.get('current', {})
+                    if isinstance(current, dict):
+                        price = current.get('value')
+
+                is_in_stock = item.get('isInStock', False)
+
+                result[vid] = {
+                    'price': price,
+                    'available': is_in_stock,
+                    'availability': 'InStock' if is_in_stock else 'OutOfStock'
+                }
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Error fetching ASOS variant details: {e}")
+            return {}

@@ -64,10 +64,8 @@ def discover_products_task(self, website_id: int, gender: str, limit: int = None
                         if idx < 3:  # Log first 3 for debugging
                             logger.info(f'Processing product {idx+1}: {product_data.get("id") or product_data.get("sku")}')
                         normalized = scraper.normalize_product_data(product_data, gender)
-                        # Carry variants through normalisation
+                        # Carry variants through normalisation (not part of standard normalize output)
                         normalized['variants'] = product_data.get('variants', [])
-                        normalized['available'] = product_data.get('available')
-                        normalized['inventoryLevel'] = product_data.get('inventoryLevel')
                         product = upsert_product(website_id, normalized)
                         if product:
                             stored_count += 1
