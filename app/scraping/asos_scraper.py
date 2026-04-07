@@ -182,18 +182,22 @@ class AsosScraper(BaseScraper):
                         sale_price = current_price
                         current_price = prev_value
             
+            is_in_stock = product.get('isInStock', True)
             return {
                 'id': str(product_id),
                 'sku': str(product_id),
                 'name': product.get('name'),
+                'title': product.get('name'),
                 'brand': product.get('brandName'),
                 'url': f"https://www.asos.com/us/{product.get('url', '')}",
                 'imageUrl': f"https://{product.get('imageUrl', '').lstrip('//')}" if product.get('imageUrl') else None,
+                'image': f"https://{product.get('imageUrl', '').lstrip('//')}" if product.get('imageUrl') else None,
                 'price': current_price,
                 'salePrice': sale_price,
-                'isInStock': product.get('isInStock', True),
+                'available': is_in_stock,
+                'availability': 'InStock' if is_in_stock else 'OutOfStock',
                 'isOnSale': sale_price is not None,
-                'isNew': product.get('isNoSize', False),  # ASOS uses this for new items
+                'isNew': product.get('isNoSize', False),
                 'gender': gender
             }
             
@@ -221,12 +225,21 @@ class AsosScraper(BaseScraper):
                 if color:
                     colors.add(color)
                 
+                variant_price = None
+                price_data = variant.get('price', {})
+                if isinstance(price_data, dict):
+                    current = price_data.get('current', {})
+                    if isinstance(current, dict):
+                        variant_price = current.get('value')
+
                 variant_list.append({
                     'sku': str(variant.get('variantId', '')),
                     'size': size,
                     'color': color,
-                    'price': variant.get('price', {}).get('current', {}).get('value'),
-                    'availability': 'InStock' if is_in_stock else 'OutOfStock'
+                    'price': variant_price,
+                    'available': is_in_stock,
+                    'availability': 'InStock' if is_in_stock else 'OutOfStock',
+                    'inventoryLevel': None
                 })
             
             # Determine size range

@@ -6,7 +6,7 @@ from app.extensions import db
 from app.models.website import Website
 from app.models.product import Product
 from app.models.product_snapshot import ProductSnapshot
-from app.scraping.product_scraper import ProductScraper
+from app.scraping.scraper_factory import ScraperFactory
 from celery_app.tasks.index_tasks import index_product
 from celery_app.tasks.alert_tasks import evaluate_alerts
 
@@ -33,39 +33,55 @@ def scrape_product(self, product_id, user_id=None):
                 logger.error(f'Website {product.website_id} not found')
                 return {'success': False, 'error': 'Website not found'}
             
-            scraper = ProductScraper(website)
-            data = scraper.scrape(product.url)
+            # Use factory to get site-specific scraper
+            scraper = ScraperFactory.create_scraper(website.id, website.base_url)
+            if not scraper:
+                logger.error(f'No scraper available for {website.base_url}')
+                return {'success': False, 'error': 'No scraper available for this website'}
             
+            # Extract SKU from URL slug (e.g. '/products/vn000d3hbka' -> 'vn000d3hbka')
+            sku = product.url.rstrip('/').split('/')[-1]
+            data = scraper.extract_product_details(sku)
             if not data:
-                logger.warning(f'Failed to scrape product {product_id} at {product.url}')
+                logger.warning(f'No data returned for product {product_id} (sku={sku})')
                 return {'success': False, 'error': 'Scrape failed'}
-            
+
+            # Update product fields
+            if data.get('price'):
+                product.price_previous = product.price_current
+                product.price_current = data['price']
+            if data.get('title') or data.get('name'):
+                product.title = data.get('title') or data.get('name')
+            if data.get('image') or data.get('imageUrl'):
+                product.image = data.get('image') or data.get('imageUrl')
+            if data.get('brand'):
+                product.brand = data['brand']
+            product.last_seen = datetime.utcnow()
+
             # Create snapshot
             snapshot = ProductSnapshot(
                 product_id=product_id,
                 price=data.get('price'),
                 currency=data.get('currency', 'USD'),
                 availability=data.get('availability'),
-                title=data.get('title', product.title),
-                image=data.get('image', product.image)
+                extra_data={
+                    'title': data.get('title') or data.get('name'),
+                    'image': data.get('image') or data.get('imageUrl'),
+                    'inventoryLevel': data.get('inventoryLevel'),
+                    'available': data.get('available'),
+                }
             )
             db.session.add(snapshot)
-            
-            # Update product with latest data
-            if data.get('price'):
-                product.price_previous = product.price_current
-                product.price_current = data['price']
-            if data.get('availability'):
-                product.availability = data['availability']
-            if data.get('title'):
-                product.title = data['title']
-            if data.get('image'):
-                product.image = data['image']
-            
+
+            # Upsert variants from the refresh response
+            if data.get('variants'):
+                from celery_app.tasks.discovery_tasks import update_product_with_details
+                update_product_with_details(product, data)
+
             db.session.commit()
-            
+
             logger.info(f'Successfully scraped product {product_id}, snapshot {snapshot.id}')
-            
+
             return {
                 'success': True,
                 'product_id': product_id,

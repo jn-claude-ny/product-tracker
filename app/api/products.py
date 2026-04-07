@@ -96,6 +96,9 @@ def get_products():
             'currency': product.currency,
             'is_new': product.is_new,
             'is_on_sale': product.is_on_sale,
+            'availability': product.availability,
+            'available': product.available,
+            'inventory_level': product.inventory_level,
             'created_at': product.created_at.isoformat() if product.created_at else None,
             'updated_at': product.updated_at.isoformat() if product.updated_at else None,
         })
@@ -128,14 +131,7 @@ def get_product(product_id):
     try:
         if product.variants.count() > 0:
             for variant in product.variants:
-                variants.append({
-                    'id': variant.id,
-                    'sku': variant.variant_sku,
-                    'size': variant.size,
-                    'color': variant.color,
-                    'stock_state': variant.stock_state,
-                    'last_checked': variant.last_checked.isoformat() if variant.last_checked else None
-                })
+                variants.append(variant.to_dict())
     except Exception:
         pass  # No variants or error accessing them
     
@@ -155,6 +151,9 @@ def get_product(product_id):
         'currency': product.currency,
         'is_new': product.is_new,
         'is_on_sale': product.is_on_sale,
+        'availability': product.availability,
+        'available': product.available,
+        'inventory_level': product.inventory_level,
         'variants': variants,
         'created_at': product.created_at.isoformat() if product.created_at else None,
         'updated_at': product.updated_at.isoformat() if product.updated_at else None,

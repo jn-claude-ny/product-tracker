@@ -26,6 +26,9 @@ class Product(db.Model):
     currency = db.Column(db.String(10), default='USD')
     is_new = db.Column(db.Boolean, default=False)
     is_on_sale = db.Column(db.Boolean, default=False)
+    availability = db.Column(db.String(100))  # raw availability text e.g. 'InStock', 'Low Stock'
+    available = db.Column(db.Boolean, default=None)  # True/False stock boolean
+    inventory_level = db.Column(db.Integer)  # total inventory across all variants
     first_seen = db.Column(db.DateTime)
     last_seen = db.Column(db.DateTime)
     last_price_change = db.Column(db.DateTime)

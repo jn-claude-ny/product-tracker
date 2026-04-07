@@ -24,6 +24,7 @@ class BaseScraper(ABC):
     def _create_session(self) -> requests.Session:
         """Create requests session with retry logic"""
         session = requests.Session()
+        session.verify = False  # Disable SSL verification
         
         retry_strategy = Retry(
             total=3,

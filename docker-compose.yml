@@ -307,31 +307,6 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  playwright_worker:
-    build:
-      context: .
-      dockerfile: docker/playwright.Dockerfile
-    command: celery -A celery_app.celery worker -Q scrape_queue -c 2 --loglevel=info
-    env_file:
-      - .env
-    environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/product_tracker
-      - REDIS_URL=redis://redis:6379/0
-      - ELASTICSEARCH_URL=http://elasticsearch:9200
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/1
-      - PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
-    volumes:
-      - ./app:/app/app
-      - ./celery_app:/app/celery_app
-      - playwright_browsers:/ms-playwright
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    restart: unless-stopped
-
   flower:
     build:
       context: .
@@ -352,4 +327,3 @@ volumes:
   postgres_data:
   redis_data:
   elasticsearch_data:
-  playwright_browsers:

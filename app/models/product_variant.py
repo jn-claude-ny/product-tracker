@@ -19,7 +19,10 @@ class ProductVariant(db.Model):
     variant_sku = db.Column(db.String(255), nullable=False)
     size = db.Column(db.String(50))
     color = db.Column(db.String(100))
-    stock_state = db.Column(db.String(20))  # 'InStock', 'OutOfStock', 'LowStock'
+    price = db.Column(db.Numeric(10, 2))  # variant-level price
+    stock_state = db.Column(db.String(100))  # raw availability text e.g. 'InStock', 'OutOfStock'
+    available = db.Column(db.Boolean, default=None)  # True/False stock boolean
+    inventory_level = db.Column(db.Integer)  # variant-level inventory count
     last_checked = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     first_seen = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     last_in_stock = db.Column(db.DateTime)
@@ -37,7 +40,10 @@ class ProductVariant(db.Model):
             'variant_sku': self.variant_sku,
             'size': self.size,
             'color': self.color,
+            'price': float(self.price) if self.price else None,
             'stock_state': self.stock_state,
+            'available': self.available,
+            'inventory_level': self.inventory_level,
             'last_checked': self.last_checked.isoformat() if self.last_checked else None,
             'first_seen': self.first_seen.isoformat() if self.first_seen else None,
             'last_in_stock': self.last_in_stock.isoformat() if self.last_in_stock else None,

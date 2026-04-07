@@ -1,6 +1,7 @@
 """
 ShopWSS Scraper
-Handles product discovery and extraction from shopwss.com using GraphQL and Bazaarvoice APIs.
+Handles product discovery and per-product refresh from shopwss.com using the Nosto GraphQL API.
+All product data (including variants) is retrieved in a single GraphQL query — no secondary API needed.
 """
 import logging
 from typing import List, Dict, Optional
@@ -8,99 +9,86 @@ from app.scraping.base_scraper import BaseScraper
 
 logger = logging.getLogger(__name__)
 
+# Discovery query — fetches full product + SKU/variant data in one shot
+DISCOVERY_QUERY = (
+    "query ( $accountId: String, $query: String, $products: InputSearchProducts,"
+    " $categories: InputSearchCategories) {"
+    " search( accountId: $accountId query: $query  products: $products categories: $categories) {"
+    " query  products { hits { productId url name imageUrl brand variantId availability"
+    " price priceCurrencyCode inventoryLevel"
+    " skus { id name price inventoryLevel customFields { key value } availability  }"
+    " } total size from } } }"
+)
+
+# Refresh query — fetches a single product by SKU keyword search
+REFRESH_QUERY = (
+    "query ( $accountId: String, $query: String, $products: InputSearchProducts ) {"
+    " search( accountId: $accountId query: $query  products: $products ) {"
+    " query products { hits { productId url name imageUrl brand availability price"
+    " priceCurrencyCode inventoryLevel available"
+    " skus { id name price url imageUrl inventoryLevel availability } } } }}"
+)
+
 
 class ShopWssScraper(BaseScraper):
-    """Scraper for shopwss.com using GraphQL (Nosto) and Bazaarvoice APIs"""
-    
+    """Scraper for shopwss.com using the Nosto GraphQL API"""
+
     CATEGORY_IDS = {
         'men': '153376063543',
         'women': '153381568567'
     }
-    
+
     GRAPHQL_URL = "https://search.nosto.com/v1/graphql"
-    BAZAARVOICE_URL = "https://apps.bazaarvoice.com/bfd/v1/clients/wss/api-products/cv2/resources/data/products.json"
     ACCOUNT_ID = "shopify-6934429751"
-    
+
     def __init__(self, website_id: int, base_url: str = "https://www.shopwss.com"):
         super().__init__(website_id, base_url)
-        
-        # GraphQL-specific headers
         self.graphql_headers = {
             'Content-Type': 'application/json',
             'x-nosto-integration': 'Search Templates',
             'Accept': 'application/json'
         }
-        
-        # Bazaarvoice-specific headers
-        self.bv_headers = {
-            'Accept': 'application/json',
-            'Accept-Encoding': 'gzip, deflate',  # Ensure gzip decompression works
-            'bv-bfd-token': '18656,main_site,en_US',
-            'Origin': 'https://www.shopwss.com',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-    
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
     def discover_products(self, gender: str, limit: Optional[int] = None) -> List[Dict]:
         """
-        Discover products using GraphQL API.
-        
+        Discover products using GraphQL API (single query with full variant data).
+
         Args:
             gender: 'men' or 'women'
-            limit: Optional limit on products to fetch
-            
+            limit: Optional cap on total products returned
+
         Returns:
-            List of product dictionaries
+            List of normalised product dicts (each includes a 'variants' key)
         """
         category_id = self.CATEGORY_IDS.get(gender.lower())
         if not category_id:
             logger.error(f"Invalid gender: {gender}")
             return []
-        
+
         products = []
-        page_size = 24  # ShopWSS default
+        page_size = 24
         from_index = 0
-        
+
         logger.info(f"Starting ShopWSS discovery for {gender} (category {category_id})")
-        
+
         while True:
             try:
-                # Build GraphQL query
-                query = """
-                query ($accountId: String, $products: InputSearchProducts) {
-                    search(accountId: $accountId, products: $products) {
-                        products {
-                            hits {
-                                productId
-                                name
-                                url
-                                imageUrl
-                                brand
-                                price
-                                priceText
-                                availability
-                            }
-                            total
-                            size
-                            from
+                payload = {
+                    "query": DISCOVERY_QUERY,
+                    "variables": {
+                        "accountId": self.ACCOUNT_ID,
+                        "products": {
+                            "categoryId": category_id,
+                            "size": page_size,
+                            "from": from_index
                         }
                     }
                 }
-                """
-                
-                variables = {
-                    "accountId": self.ACCOUNT_ID,
-                    "products": {
-                        "categoryId": category_id,
-                        "size": page_size,
-                        "from": from_index
-                    }
-                }
-                
-                payload = {
-                    "query": query,
-                    "variables": variables
-                }
-                
+
                 logger.info(f"Fetching ShopWSS page: from={from_index}, size={page_size}")
                 response = self.session.post(
                     self.GRAPHQL_URL,
@@ -109,219 +97,183 @@ class ShopWssScraper(BaseScraper):
                     timeout=30
                 )
                 response.raise_for_status()
-                
+
                 data = response.json()
-                
-                # Extract products from GraphQL response
                 search_data = data.get('data', {}).get('search', {}).get('products', {})
                 hits = search_data.get('hits', [])
                 total = search_data.get('total', 0)
-                
+
                 if not hits:
                     logger.info("No more products found")
                     break
-                
-                # Process products
+
                 for hit in hits:
-                    product_data = self._parse_listing_product(hit, gender)
+                    product_data = self._parse_hit(hit, gender)
                     if product_data:
                         products.append(product_data)
-                
-                logger.info(f"Fetched {len(hits)} products (total: {len(products)}/{total})")
-                
-                # Check if we've reached the limit
+
+                logger.info(f"Fetched {len(hits)} products (total so far: {len(products)}/{total})")
+
                 if limit and len(products) >= limit:
                     products = products[:limit]
                     logger.info(f"Reached limit of {limit} products")
                     break
-                
-                # Check if there are more pages
+
                 if from_index + page_size >= total:
                     logger.info(f"Reached end of results (total: {total})")
                     break
-                
-                # Move to next page
+
                 from_index += page_size
-                self.rate_limit(0.5)  # Rate limiting
-                
+                self.rate_limit(0.5)
+
             except Exception as e:
                 logger.error(f"Error fetching ShopWSS products at index {from_index}: {e}")
                 break
-        
+
         logger.info(f"ShopWSS discovery complete: {len(products)} products found")
         return products
-    
-    def extract_product_details(self, product_id: str) -> Optional[Dict]:
+
+    def extract_product_details(self, sku: str) -> Optional[Dict]:
         """
-        Extract detailed product information from Bazaarvoice API.
-        
+        Refresh a single product by SKU using a GraphQL keyword search.
+        The SKU is extracted from the product URL slug
+        (e.g. 'vn000d3hbka' from '/products/vn000d3hbka').
+
         Args:
-            product_id: ShopWSS product ID
-            
+            sku: Product SKU / URL slug
+
         Returns:
-            Dictionary with detailed product info
+            Normalised product dict or None
         """
         try:
-            # Rate limit to avoid overwhelming the API
             self.rate_limit(0.3)
-            
-            params = {
-                'locale': 'en_US',
-                'allowMissing': 'true',
-                'apiVersion': '5.4',
-                'filter': f'id:{product_id}'
+
+            payload = {
+                "query": REFRESH_QUERY,
+                "variables": {
+                    "accountId": self.ACCOUNT_ID,
+                    "query": sku,
+                    "products": {}
+                }
             }
-            
-            logger.debug(f"Fetching ShopWSS product details: {product_id}")
-            response = self.session.get(
-                self.BAZAARVOICE_URL,
-                params=params,
-                headers=self.bv_headers,
+
+            logger.debug(f"Refreshing ShopWSS product: {sku}")
+            response = self.session.post(
+                self.GRAPHQL_URL,
+                json=payload,
+                headers=self.graphql_headers,
                 timeout=30
             )
-            
-            # Check status before trying to parse
+
             if response.status_code == 429:
-                logger.warning(f"Rate limited for product {product_id}, skipping")
+                logger.warning(f"Rate limited for SKU {sku}, skipping")
                 return None
-            
+
             response.raise_for_status()
-            
-            # Check if response has content
+
             if not response.text or response.text.strip() == '':
-                logger.warning(f"Empty response for product {product_id}")
+                logger.warning(f"Empty response for SKU {sku}")
                 return None
-            
-            try:
-                # response.json() should automatically handle gzip decompression
-                data = response.json()
-            except ValueError as json_err:
-                # Log the actual content-encoding to debug compression issues
-                encoding = response.headers.get('Content-Encoding', 'none')
-                logger.error(f"JSON decode error for product {product_id} (encoding: {encoding}): {json_err}")
+
+            data = response.json()
+            hits = (
+                data.get('data', {})
+                    .get('search', {})
+                    .get('products', {})
+                    .get('hits', [])
+            )
+
+            if not hits:
+                logger.warning(f"No results found for SKU {sku}")
                 return None
-            
-            # Parse Bazaarvoice response - check for 'response' wrapper
-            if 'response' in data:
-                response_data = data.get('response', {})
-                if response_data is None:
-                    logger.warning(f"Null response data for product {product_id}")
-                    return None
-                results = response_data.get('Results', [])
-            else:
-                results = data.get('Results', [])
-            
-            if results and len(results) > 0:
-                product_data = results[0]
-                return self._parse_detail_product(product_data)
-            
-            logger.warning(f"No details found for product {product_id}")
-            return None
-            
-        except requests.exceptions.RequestException as req_err:
-            logger.error(f"Request error for product {product_id}: {req_err}")
-            return None
+
+            # Pick the closest match (first hit)
+            hit = hits[0]
+            return self._parse_hit(hit, gender=None)
+
         except Exception as e:
-            logger.error(f"Unexpected error fetching product {product_id}: {e}")
+            logger.error(f"Error refreshing ShopWSS product {sku}: {e}")
             return None
-    
-    def _parse_listing_product(self, hit: Dict, gender: str) -> Optional[Dict]:
-        """Parse product from GraphQL listing"""
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _parse_hit(self, hit: Dict, gender: Optional[str]) -> Optional[Dict]:
+        """Parse a GraphQL hit into a normalised product dict."""
         try:
             product_id = hit.get('productId')
             if not product_id:
                 return None
-            
-            # Parse price
-            price = hit.get('price')
-            if isinstance(price, str):
-                price = float(price.replace('$', '').replace(',', ''))
-            
-            # Normalize availability
-            availability = hit.get('availability', '').lower()
-            is_in_stock = 'instock' in availability or 'in stock' in availability
-            
-            return {
+
+            price = self._parse_price(hit.get('price'))
+
+            # Availability — keep raw text for display, derive bool separately
+            availability_text = hit.get('availability') or 'Unknown'
+            available = hit.get('available')
+            if available is None:
+                # Fall back to text heuristic if 'available' field absent
+                av_lower = availability_text.lower()
+                available = 'instock' in av_lower or 'in stock' in av_lower
+
+            variants = self._parse_skus(hit.get('skus') or [])
+
+            result = {
                 'id': str(product_id),
                 'sku': str(product_id),
                 'name': hit.get('name'),
+                'title': hit.get('name'),
                 'brand': hit.get('brand'),
                 'url': hit.get('url'),
                 'imageUrl': hit.get('imageUrl'),
+                'image': hit.get('imageUrl'),
                 'price': price,
-                'priceText': hit.get('priceText'),
-                'availability': 'InStock' if is_in_stock else 'OutOfStock',
-                'isInStock': is_in_stock,
-                'gender': gender
-            }
-            
-        except Exception as e:
-            logger.error(f"Error parsing ShopWSS listing product: {e}")
-            return None
-    
-    def _parse_detail_product(self, product: Dict) -> Optional[Dict]:
-        """Parse detailed product information from Bazaarvoice"""
-        try:
-            # Extract attributes
-            attributes = product.get('Attributes', {})
-            
-            # Extract variants/sizes if available
-            variants = []
-            sizes = set()
-            colors = set()
-            
-            # Bazaarvoice may have size/color in different structures
-            # Check for common fields
-            size_attr = attributes.get('Size') or attributes.get('size')
-            color_attr = attributes.get('Color') or attributes.get('color')
-            
-            if size_attr:
-                if isinstance(size_attr, list):
-                    sizes.update(size_attr)
-                else:
-                    sizes.add(str(size_attr))
-            
-            if color_attr:
-                if isinstance(color_attr, list):
-                    colors.update(color_attr)
-                else:
-                    colors.add(str(color_attr))
-            
-            # Try to extract variants from product data
-            variant_data = product.get('Variants', [])
-            for variant in variant_data:
-                variant_info = {
-                    'sku': variant.get('Id') or variant.get('SKU'),
-                    'size': variant.get('Size'),
-                    'color': variant.get('Color'),
-                    'price': variant.get('Price'),
-                    'availability': 'InStock' if variant.get('InStock') else 'OutOfStock'
-                }
-                variants.append(variant_info)
-                
-                if variant.get('Size'):
-                    sizes.add(str(variant.get('Size')))
-                if variant.get('Color'):
-                    colors.add(str(variant.get('Color')))
-            
-            # Determine size range
-            size_range = None
-            if sizes:
-                try:
-                    numeric_sizes = [float(s) for s in sizes if s and str(s).replace('.', '').isdigit()]
-                    if numeric_sizes:
-                        size_range = f"{min(numeric_sizes)}-{max(numeric_sizes)}"
-                except:
-                    pass
-            
-            return {
+                'currency': hit.get('priceCurrencyCode', 'USD'),
+                'availability': availability_text,
+                'available': available,
+                'inventoryLevel': hit.get('inventoryLevel'),
                 'variants': variants,
-                'size_range': size_range,
-                'color': ', '.join(sorted(colors)) if colors else None,
-                'description': product.get('Description') or product.get('BrandDescription'),
-                'productCode': product.get('Id')
             }
-            
+
+            if gender:
+                result['gender'] = gender
+
+            return result
+
         except Exception as e:
-            logger.error(f"Error parsing ShopWSS detail product: {e}")
+            logger.error(f"Error parsing ShopWSS hit: {e}")
             return None
+
+    def _parse_skus(self, skus: List[Dict]) -> List[Dict]:
+        """Parse SKU list into variant dicts."""
+        variants = []
+        for sku in skus:
+            custom_fields = {cf['key']: cf['value'] for cf in (sku.get('customFields') or [])}
+            availability_text = sku.get('availability') or 'Unknown'
+            av_lower = availability_text.lower()
+            in_stock = 'instock' in av_lower or 'in stock' in av_lower
+
+            variants.append({
+                'sku': sku.get('id'),
+                'name': sku.get('name'),
+                'size': custom_fields.get('size'),
+                'color': custom_fields.get('color'),
+                'price': self._parse_price(sku.get('price')),
+                'inventoryLevel': sku.get('inventoryLevel'),
+                'availability': availability_text,
+                'available': in_stock,
+            })
+        return variants
+
+    def _parse_price(self, value) -> Optional[float]:
+        """Coerce price to float."""
+        if value is None:
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            try:
+                return float(value.replace('$', '').replace(',', '').strip())
+            except ValueError:
+                return None
+        return None

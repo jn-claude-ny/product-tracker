@@ -52,14 +52,11 @@ def discover_products_task(self, website_id: int, gender: str, limit: int = None
                 if not products:
                     return {'status': 'success', 'products_discovered': 0}
                 
-                # Batch product IDs for detail extraction
-                product_ids = [p.get('id') or p.get('sku') for p in products if p.get('id') or p.get('sku')]
-                
                 # Update website with total expected products
                 website.total_products_expected = (website.total_products_expected or 0) + len(products)
                 db.session.commit()
-                
-                # Store basic product info
+
+                # Store products — variants already included in each hit
                 stored_count = 0
                 logger.info(f'Starting to store {len(products)} products...')
                 for idx, product_data in enumerate(products):
@@ -67,39 +64,34 @@ def discover_products_task(self, website_id: int, gender: str, limit: int = None
                         if idx < 3:  # Log first 3 for debugging
                             logger.info(f'Processing product {idx+1}: {product_data.get("id") or product_data.get("sku")}')
                         normalized = scraper.normalize_product_data(product_data, gender)
+                        # Carry variants through normalisation
+                        normalized['variants'] = product_data.get('variants', [])
+                        normalized['available'] = product_data.get('available')
+                        normalized['inventoryLevel'] = product_data.get('inventoryLevel')
                         product = upsert_product(website_id, normalized)
                         if product:
                             stored_count += 1
                     except Exception as e:
                         logger.error(f'Error storing product: {e}', exc_info=True)
-                
-                # Update discovered count
+
+                # Mark crawl complete (single-pass — no detail extraction needed)
                 website.products_discovered = (website.products_discovered or 0) + stored_count
-                website.crawl_progress = int((website.products_discovered / website.total_products_expected) * 50) if website.total_products_expected > 0 else 0
+                website.products_processed = (website.products_processed or 0) + stored_count
+                website.crawl_progress = 100
+                website.crawl_state = 'completed'
+                website.is_crawling = False
+                website.current_task_id = None
+                website.last_crawl_completed_at = datetime.utcnow()
                 db.session.commit()
-                
-                logger.info(f'Stored {stored_count} products. Progress: {website.crawl_progress}%')
-                
-                # Queue detail extraction tasks in batches
-                batch_size = 50
-                batches = [product_ids[i:i + batch_size] for i in range(0, len(product_ids), batch_size)]
-                
-                tasks = []
-                for batch in batches:
-                    tasks.append(extract_product_details_batch.s(website_id, batch))
-                
-                if tasks:
-                    job = group(tasks)
-                    job.apply_async()
-                    logger.info(f'Queued {len(batches)} detail extraction batches')
-                
+
+                logger.info(f'Stored {stored_count} products (variants included). Crawl complete.')
+
                 scraper.close()
-                
+
                 return {
                     'status': 'success',
                     'products_discovered': len(products),
                     'products_stored': stored_count,
-                    'detail_batches_queued': len(batches)
                 }
                 
             except Exception as e:
@@ -237,14 +229,14 @@ def upsert_product(website_id: int, product_data: dict) -> Product:
         if product:
             # Update existing product
             old_price = product.price_current
-            
+
             product.title = product_data.get('title') or product.title
             product.brand = product_data.get('brand') or product.brand
             product.image = product_data.get('image') or product.image
             product.gender = product_data.get('gender') or product.gender
             product.category = product_data.get('category')
             product.color = product_data.get('color')
-            
+
             # Handle price updates
             new_price = product_data.get('price_current')
             if new_price and new_price != product.price_current:
@@ -253,20 +245,23 @@ def upsert_product(website_id: int, product_data: dict) -> Product:
                 product.last_price_change = datetime.utcnow()
             elif new_price:
                 product.price_current = new_price
-            
+
             product.currency = product_data.get('currency', 'USD')
             product.is_on_sale = product_data.get('is_on_sale', False)
             product.is_new = product_data.get('is_new', False)
             product.categories = product_data.get('categories', [])
+            product.availability = product_data.get('availability') or product.availability
+            product.available = product_data.get('available') if product_data.get('available') is not None else product.available
+            product.inventory_level = product_data.get('inventoryLevel') if product_data.get('inventoryLevel') is not None else product.inventory_level
             product.last_seen = datetime.utcnow()
             product.updated_at = datetime.utcnow()
-            
+
             # Create snapshot if price changed
             if old_price != product.price_current and product.price_current:
                 snapshot = ProductSnapshot(
                     product_id=product.id,
                     price=product.price_current,
-                    availability='Unknown'
+                    availability=product.availability
                 )
                 db.session.add(snapshot)
         else:
@@ -286,23 +281,31 @@ def upsert_product(website_id: int, product_data: dict) -> Product:
                 is_on_sale=product_data.get('is_on_sale', False),
                 is_new=product_data.get('is_new', False),
                 categories=product_data.get('categories', []),
+                availability=product_data.get('availability'),
+                available=product_data.get('available'),
+                inventory_level=product_data.get('inventoryLevel'),
                 first_seen=datetime.utcnow(),
                 last_seen=datetime.utcnow()
             )
             db.session.add(product)
             db.session.flush()  # Flush to get product.id without committing
-            
-            # Create initial snapshot if price exists (now that we have product.id)
+
+            # Create initial snapshot if price exists
             if product.price_current:
                 snapshot = ProductSnapshot(
                     product_id=product.id,
                     price=product.price_current,
-                    availability='Unknown'
+                    availability=product.availability
                 )
                 db.session.add(snapshot)
         
         db.session.commit()
         logger.info(f"✅ Successfully saved product: id={product.id}, sku={product.sku}")
+
+        # Upsert variants if present (they come straight from the GraphQL hit)
+        if product_data.get('variants'):
+            update_product_with_details(product, product_data)
+
         return product
         
     except Exception as e:
@@ -313,59 +316,62 @@ def upsert_product(website_id: int, product_data: dict) -> Product:
 
 def update_product_with_details(product: Product, details: dict):
     """
-    Update product with detailed information.
-    
+    Update product with variant/detail information from a scraper hit.
+
     Args:
         product: Product instance
-        details: Detailed product data
+        details: Normalised product data (may include 'variants' list)
     """
     try:
-        # Update product fields
         if details.get('color'):
             product.color = details['color']
-        
-        # Update variants (using ProductVariant model, not variants_data)
+
         if details.get('variants'):
-            
-            # Create/update ProductVariant records
             from app.models.product_variant import ProductVariant
-            
+
             for variant_data in details['variants']:
                 variant_sku = variant_data.get('sku', '')
                 if not variant_sku:
-                    continue  # Skip variants without SKU
-                    
+                    continue
+
                 variant = ProductVariant.query.filter_by(
                     product_id=product.id,
-                    variant_sku=variant_sku
+                    variant_sku=str(variant_sku)
                 ).first()
-                
+
+                is_in_stock = variant_data.get('available', False)
+                availability_text = variant_data.get('availability', 'Unknown')
+
                 if variant:
-                    # Update existing
                     variant.size = variant_data.get('size')
                     variant.color = variant_data.get('color')
-                    variant.stock_state = variant_data.get('availability', 'Unknown')
+                    variant.price = variant_data.get('price')
+                    variant.stock_state = availability_text
+                    variant.available = is_in_stock
+                    variant.inventory_level = variant_data.get('inventoryLevel')
                     variant.last_checked = datetime.utcnow()
-                    if variant_data.get('availability') == 'InStock':
+                    if is_in_stock:
                         variant.last_in_stock = datetime.utcnow()
                     variant.updated_at = datetime.utcnow()
                 else:
-                    # Create new
                     variant = ProductVariant(
                         product_id=product.id,
-                        variant_sku=variant_sku,
+                        variant_sku=str(variant_sku),
                         size=variant_data.get('size'),
                         color=variant_data.get('color'),
-                        stock_state=variant_data.get('availability', 'Unknown'),
+                        price=variant_data.get('price'),
+                        stock_state=availability_text,
+                        available=is_in_stock,
+                        inventory_level=variant_data.get('inventoryLevel'),
                         last_checked=datetime.utcnow(),
                         first_seen=datetime.utcnow(),
-                        last_in_stock=datetime.utcnow() if variant_data.get('availability') == 'InStock' else None
+                        last_in_stock=datetime.utcnow() if is_in_stock else None
                     )
                     db.session.add(variant)
-        
+
         product.updated_at = datetime.utcnow()
         db.session.commit()
-        
+
     except Exception as e:
         logger.error(f'Error updating product with details: {e}')
         db.session.rollback()
