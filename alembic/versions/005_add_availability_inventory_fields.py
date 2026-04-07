@@ -16,8 +16,8 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Products table — availability already added in 003, but only in DB not in model
-    # Add available (bool) and inventory_level (int)
+    # Products table — add availability (text), available (bool), inventory_level (int)
+    op.add_column('products', sa.Column('availability', sa.String(100), nullable=True))
     op.add_column('products', sa.Column('available', sa.Boolean(), nullable=True))
     op.add_column('products', sa.Column('inventory_level', sa.Integer(), nullable=True))
 
@@ -36,3 +36,4 @@ def downgrade() -> None:
     op.drop_column('product_variants', 'price')
     op.drop_column('products', 'inventory_level')
     op.drop_column('products', 'available')
+    op.drop_column('products', 'availability')
