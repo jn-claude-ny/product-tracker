@@ -300,6 +300,14 @@
                                         </span>
                                     </div>
 
+                                    <!-- Schedule Badge -->
+                                    <div class="flex items-center text-sm" x-show="website.cron_schedule">
+                                        <svg class="w-5 h-5 mr-2 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                        </svg>
+                                        <span class="text-purple-600 dark:text-purple-400 font-medium text-xs" x-text="formatScheduleLabel(website.cron_schedule)"></span>
+                                    </div>
+
                                     <!-- Progress Bar -->
                                     <div x-show="website.crawl_state !== 'never_crawled'" class="mt-4">
                                         <div class="flex items-center justify-between text-xs mb-2">
@@ -845,6 +853,7 @@
             sortBy: 'name',
             currentPage: 1,
             itemsPerPage: 5,
+            showScheduleModal: false,
             configWebsiteData: {
                 id: null,
                 name: '',
@@ -1101,25 +1110,56 @@
             },
             
             openScheduleModal(website) {
+                const cron = website.cron_schedule || null;
                 this.scheduleWebsiteData = {
                     id: website.id,
                     name: website.name,
-                    enabled: !!website.cron_schedule,
-                    frequency: this.parseFrequency(website.cron_schedule),
-                    time: '00:00',
-                    day_of_week: '0'
+                    enabled: !!cron,
+                    frequency: this.parseFrequency(cron),
+                    time: this.parseTime(cron),
+                    day_of_week: this.parseDayOfWeek(cron)
                 };
                 this.showScheduleModal = true;
             },
-            
-            parseFrequency(cronSchedule) {
-                if (!cronSchedule) return 'daily';
-                // Parse cron to frequency (simplified)
-                if (cronSchedule.includes('0 * * * *')) return 'hourly';
-                if (cronSchedule.includes('0 */6 * * *')) return 'every_6_hours';
-                if (cronSchedule.includes('0 */12 * * *')) return 'every_12_hours';
-                if (cronSchedule.includes('0 0 * * 0')) return 'weekly';
+
+            parseFrequency(cron) {
+                if (!cron) return 'daily';
+                const p = cron.trim().split(/\s+/);
+                if (p[1] === '*')                  return 'hourly';        // 0 * * * *
+                if (p[1] && p[1].startsWith('*/6')) return 'every_6_hours'; // 0 */6 * * *
+                if (p[1] && p[1].startsWith('*/12'))return 'every_12_hours';// 0 */12 * * *
+                if (p[4] && p[4] !== '*')          return 'weekly';        // * * * * <dow>
                 return 'daily';
+            },
+
+            parseTime(cron) {
+                if (!cron) return '00:00';
+                const p = cron.trim().split(/\s+/);
+                // For daily/weekly: "<min> <hour> * * *" format
+                const min  = (p[0] && !p[0].includes('*') && !p[0].includes('/')) ? p[0].padStart(2,'0') : '00';
+                const hour = (p[1] && !p[1].includes('*') && !p[1].includes('/')) ? p[1].padStart(2,'0') : '00';
+                return `${hour}:${min}`;
+            },
+
+            parseDayOfWeek(cron) {
+                if (!cron) return '0';
+                const p = cron.trim().split(/\s+/);
+                return (p[4] && p[4] !== '*') ? p[4] : '0';
+            },
+
+            formatScheduleLabel(cron) {
+                if (!cron) return null;
+                const freq = this.parseFrequency(cron);
+                const time = this.parseTime(cron);
+                const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+                const dow  = parseInt(this.parseDayOfWeek(cron));
+                switch(freq) {
+                    case 'hourly':         return 'Every hour';
+                    case 'every_6_hours':  return 'Every 6h';
+                    case 'every_12_hours': return 'Every 12h';
+                    case 'weekly':         return `Weekly ${days[dow] || ''} ${time} UTC`;
+                    default:               return `Daily ${time} UTC`;
+                }
             },
             
             getNextRunTime() {
