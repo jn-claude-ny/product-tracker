@@ -2,6 +2,8 @@
 
 Multi-site e-commerce product tracker with automated scraping, variant/size tracking, price alerts, and Discord notifications. Supports **ASOS**, **Shop WSS**, and **Champs Sports**.
 
+![Dashboard](docs/screenshots/websites_info.png)
+
 ---
 
 ## Table of Contents
@@ -147,7 +149,9 @@ docker compose exec flask alembic upgrade head
 
 ### 2. Register an account
 
-Open http://localhost:8081, click **Register**, and create your account.
+Open `http://localhost`, click **Register**, and create your account.
+
+![Login](docs/screenshots/login.png)
 
 ### 3. Add a website
 
@@ -163,7 +167,7 @@ After adding a site, set a **Discord webhook URL** on it for site-level notifica
 
 ### 4. Run your first crawl
 
-From the Dashboard, click **Crawl Now** on your website. This discovers products and populates the database. The crawl runs in the background — watch progress in the UI or via:
+From the Dashboard, click **Update** on your website card. This discovers products and populates the database. The crawl runs in the background — watch progress on the dashboard or via:
 
 ```bash
 docker compose logs -f celery_worker_crawl
@@ -171,38 +175,75 @@ docker compose logs -f celery_worker_crawl
 
 ### 5. Browse products
 
-Once the crawl is done, go to **Products** to see discovered items with price, availability, and inventory.
+Once the crawl completes the progress bar hits 100% and you can click through to **Products**.
+
+![Dashboard with websites](docs/screenshots/websites_info.png)
 
 ---
 
 ## Usage
 
-### Crawling
+### Product Catalog
 
-- **Manual crawl**: Dashboard → site card → **Crawl Now**
-- **Scheduled crawl**: Configure schedule (daily/weekly) per site in site settings
-- Crawl discovers products and saves them to the database with variants and availability
+The Products page shows all discovered items across all crawled sites with real-time price, availability badge, and inventory count.
 
-### Product Search
+![Products](docs/screenshots/products.png)
 
-- Use the search bar on the Products page to filter by title, brand, or SKU
-- Filter by availability, gender, price range
+### Search & Filters
+
+Filter by keyword, website, gender, stock status, and price. Toggle **New Arrivals** or **On Sale** badges to quickly surface deals and restocks.
+
+![Search and filters](docs/screenshots/Search_and_filters.png)
+
+![Sale and new badges](docs/screenshots/sale_and_new_filters.png)
+
+![All filters active](docs/screenshots/all_filters.png)
 
 ---
 
 ## Tracked Products & Alerts
 
+### Your tracked products list
+
+The dashboard shows all products you are currently tracking with their live size availability grid, schedule, and next check countdown. Click **Run Now** to trigger an immediate scrape without waiting for the schedule.
+
+![Tracked products](docs/screenshots/tracked_products.png)
+
 ### Tracking a product
 
-1. Go to **Products**, find a product, click **Track**
-2. Configure alert rules:
-   - **Price direction**: alert when price goes `above` or `below` a reference value
-   - **Size filter**: track only specific sizes (e.g. `US 10, US 11`) — leave blank to track all
-   - **Availability filter**: `InStock`, `OutOfStock`, or leave blank
-   - **Schedule**: how often to re-check (`hourly`, `daily`, `weekly`)
-   - **Priority**: controls which Celery queue handles the check
-   - **Discord webhook**: per-tracked-product webhook URL (overrides site-level webhook)
-3. Click **Save**
+Click **Track** on any product card to open the tracking dialog.
+
+![Track product dialog](docs/screenshots/Track_product.png)
+
+Configure your alert rules:
+
+**Price alert — alert when price decreases below current**
+
+![Price decrease alert](docs/screenshots/Track_price_decrease.png)
+
+**Price alert — alert when price increases above current**
+
+![Price increase alert](docs/screenshots/Track_price_increase.png)
+
+**Availability filter** — only alert for a specific stock state
+
+![Availability filter](docs/screenshots/Track_availability.png)
+
+**Priority** — controls how frequently the product is re-checked
+
+| Priority | Re-check interval |
+|---|---|
+| ⚡ Instant (Now) | Immediately / on demand |
+| 🔴 Urgent | ~5 min |
+| 🟠 High | ~15 min |
+| 🟡 Moderate | ~30 min |
+| 🟢 Normal | ~1 hour |
+
+![Priority selector](docs/screenshots/Track_priority.png)
+
+**Check Schedule** — independent recurring schedule on top of priority
+
+![Schedule selector](docs/screenshots/Track_schedule.png)
 
 ### Alert types
 
@@ -212,17 +253,11 @@ Once the crawl is done, go to **Products** to see discovered items with price, a
 | `price_increase` | Current price rises above your reference price |
 | `availability_match` | A tracked size matches your availability filter |
 
-### Run Now
+### Discord notifications
 
-From the Dashboard tracked products table, click **Run Now** to immediately trigger a scrape + alert evaluation for a specific tracked product without waiting for the schedule.
+Alerts are delivered as rich Discord embeds including product name (clickable link), brand, price, size, availability status, inventory count, and product image.
 
-### Discord embed format
-
-Alerts are sent as Discord embeds with:
-- **Title** = product name (clickable link to product page)
-- **Description** = alert type + size availability (when applicable)
-- Fields: Brand, Price, Size, Color, Status, Inventory, SKU
-- Thumbnail = product image
+![Discord alerts](docs/screenshots/Discord_alerts.png)
 
 ### Cooldowns
 
@@ -335,15 +370,17 @@ product-tracker/
 │       └── ...
 ├── celery_app/
 │   ├── tasks/
-│   │   ├── crawl_tasks.py         # Site discovery crawls
-│   │   ├── scrape_tasks.py        # Per-product scraping + snapshots
+│   │   ├── crawl_tasks.py            # Site discovery crawls
+│   │   ├── scrape_tasks.py           # Per-product scraping + snapshots
 │   │   ├── tracked_product_tasks.py  # Tracked product check chains
-│   │   ├── alert_tasks.py         # Alert evaluation + Discord sending
-│   │   ├── discovery_tasks.py     # Product upsert helpers
-│   │   └── index_tasks.py         # Elasticsearch indexing
+│   │   ├── alert_tasks.py            # Alert evaluation + Discord sending
+│   │   ├── discovery_tasks.py        # Product upsert helpers
+│   │   └── index_tasks.py            # Elasticsearch indexing
 │   ├── celery.py              # Celery app + task routing
 │   └── beat_scheduler.py      # Dynamic periodic scheduler
 ├── alembic/                   # DB migration scripts
+├── docs/
+│   └── screenshots/           # UI screenshots used in this README
 ├── docker/
 │   ├── flask.Dockerfile
 │   └── worker.Dockerfile
