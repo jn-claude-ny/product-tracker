@@ -1,8 +1,46 @@
 """
-ChampsSports Scraper
-Discovers products using zendriver (undetected Chrome) + GOST local proxy tunnel
-for residential proxy authentication. Clicks the next-page button and intercepts
-the search API response via CDP Network events.
+champssports_scraper.py
+-----------------------
+Scraper for champssports.com. Has two separate responsibilities:
+
+  1. extract_product_details(url)  [ACTIVE - used by scrape_tasks.py]
+     ---------------------------------------------------------------
+     Fetches a single Product Detail Page (PDP) HTML via BrightData residential
+     proxy using the standard `requests` library. Parses the "sizes":[...] JSON
+     array that is server-side rendered into the page HTML, and returns variant
+     data (size, price, availability, inventory) for alert evaluation.
+
+     Why `requests` and not Chrome:
+       The PDP is SSR (server-side rendered). Bot detection does NOT apply to
+       the PDP HTML fetch when going through BrightData — the proxy handles
+       IP rotation and TLS fingerprint masking.
+
+  2. discover_products(gender)  [LEGACY/BROKEN - zendriver + GOST]
+     ------------------------------------------------------------
+     Originally used zendriver (undetected Chrome) + a local GOST proxy tunnel
+     to intercept the search API (zgw/search-core/products/v3/search) via CDP.
+     THIS IS NOT CURRENTLY WORKING due to Akamai Bot Manager blocking React
+     hydration, which keeps the Next-page button permanently disabled even with
+     a real browser. Kept in code for future reference.
+
+     If you need to fix discovery, the options are:
+       a) BrightData Scraping Browser (proxy with built-in bot bypass)
+       b) Playwright + stealth plugin
+       c) Parse the SSR HTML on the category page (same approach as PDP)
+
+PROXY (used by extract_product_details):
+  BrightData residential proxy via environment variables:
+    BRIGHTDATA_PROXY_HOST     default: brd.superproxy.io
+    BRIGHTDATA_PROXY_PORT     default: 33335
+    BRIGHTDATA_PROXY_USERNAME default: brd-customer-hl_b82fa24b-zone-wss_champs_asos-country-us
+    BRIGHTDATA_PROXY_PASSWORD default: hppx772t42sn
+
+DATA LOCATION IN PDP HTML:
+  The page embeds product data in a <script> block as:
+    "sizes":[{id, size, price.salePrice, inventory.inventoryAvailable, inventory.inventoryQuantity, ...}]
+  The bracket-counting parser (not regex) is used because the sizes array
+  contains deeply nested objects and a simple `.*?` regex stops at the first
+  inner `]`, producing a truncated/invalid JSON string.
 """
 import asyncio
 import base64
@@ -14,6 +52,9 @@ import subprocess
 import time
 from typing import List, Dict, Optional
 
+# zendriver is only installed in the worker container (not Flask).
+# Guard the import so the Flask container doesn't crash on startup.
+# discover_products() uses zendriver; extract_product_details() does NOT.
 try:
     import zendriver as zd
     from zendriver.core.config import Config
@@ -27,14 +68,17 @@ from app.scraping.base_scraper import BaseScraper
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Configuration for the legacy zendriver-based discovery (currently unused)
+# ---------------------------------------------------------------------------
 CHROME_EXE   = os.getenv('CHROME_EXECUTABLE_PATH', '/usr/bin/google-chrome-stable')
 PROFILE_DIR  = os.getenv('CHAMPS_USER_DATA_DIR', '/app/app/scraping/champ_data_linux')
-GOST_PORT    = int(os.getenv('CHAMPS_GOST_PORT', '18899'))
+GOST_PORT    = int(os.getenv('CHAMPS_GOST_PORT', '18899'))      # local GOST HTTP proxy port
 GOST_EXE     = os.getenv('GOST_EXECUTABLE', '/usr/local/bin/gost')
 PROXY_HOST   = os.getenv('CHAMPS_PROXY_HOST', 'brd.superproxy.io:33335')
 PROXY_USER   = os.getenv('CHAMPS_PROXY_USER', 'brd-customer-hl_752541f5-zone-champs_residential_proxy1')
 PROXY_PASS   = os.getenv('CHAMPS_PROXY_PASS', 'zk7h5o7vxvt3')
-XDISPLAY     = os.getenv('CHAMPS_DISPLAY', ':89')
+XDISPLAY     = os.getenv('CHAMPS_DISPLAY', ':89')  # virtual X display for Xvfb
 
 
 class ChampsSportsScraper(BaseScraper):
@@ -56,9 +100,23 @@ class ChampsSportsScraper(BaseScraper):
             return []
 
     def extract_product_details(self, url: str) -> Optional[Dict]:
-        """Fetch PDP HTML via BrightData proxy and parse size/price/availability from embedded JS."""
+        """
+        Fetch the Product Detail Page (PDP) HTML and extract size/variant data.
+
+        Args:
+            url: Full product URL, e.g.
+                 https://www.champssports.com/product/asics-gel-1130-mens/3A609021.html
+
+        Returns dict with keys:
+            variants      - list of {sku, size, price, available, availability, inventoryLevel}
+            availability  - 'InStock' or 'OutOfStock' (derived from variants)
+            available     - bool
+            inventoryLevel - total inventory across all variants
+            price         - price from first available variant
+        """
         import requests as req
 
+        # Read BrightData proxy credentials from environment (set in docker-compose / .env)
         proxy_host = os.getenv('BRIGHTDATA_PROXY_HOST', 'brd.superproxy.io')
         proxy_port = os.getenv('BRIGHTDATA_PROXY_PORT', '33335')
         proxy_user = os.getenv('BRIGHTDATA_PROXY_USERNAME', 'brd-customer-hl_b82fa24b-zone-wss_champs_asos-country-us')
@@ -82,13 +140,25 @@ class ChampsSportsScraper(BaseScraper):
 
         html = resp.text
 
-        # Extract "sizes":[...] using bracket counting to handle nested objects
+        # ---------------------------------------------------------------------------
+        # EXTRACT "sizes":[...] FROM PAGE HTML
+        # ---------------------------------------------------------------------------
+        # The page embeds all size/variant data in a JS variable inside a <script>
+        # block as:  "sizes":[{...}, {...}, ...]
+        #
+        # WHY bracket-counting instead of regex:
+        #   re.DOTALL + .*? stops at the FIRST ] it finds, which may be inside a
+        #   nested object (e.g. inside inventory.storeUpc array), producing a
+        #   truncated string that fails JSON parsing.
+        #   The bracket counter correctly walks to the matching closing ] at
+        #   depth 0, regardless of nesting.
+        # ---------------------------------------------------------------------------
         start_match = re.search(r'"sizes"\s*:\s*\[', html)
         if not start_match:
             logger.warning(f'No sizes data found in ChampsSports PDP: {url}')
             return None
 
-        start = start_match.end() - 1  # position of opening '['
+        start = start_match.end() - 1  # position of the opening '['
         depth = 0
         end = start
         for i, ch in enumerate(html[start:], start):
@@ -97,7 +167,7 @@ class ChampsSportsScraper(BaseScraper):
             elif ch == ']':
                 depth -= 1
                 if depth == 0:
-                    end = i + 1
+                    end = i + 1  # include the closing ']'
                     break
 
         try:

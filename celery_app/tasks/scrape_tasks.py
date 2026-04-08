@@ -1,3 +1,27 @@
+# ---------------------------------------------------------------------------
+# scrape_tasks.py
+# ---------------------------------------------------------------------------
+# Responsible for fetching up-to-date product details (price, availability,
+# variants/sizes) for a SINGLE product that already exists in the database.
+#
+# This is NOT discovery (finding new products) — that is crawl_tasks.py /
+# discovery_tasks.py. This task is called AFTER a product has been found and
+# stored, to keep its data fresh and to feed the alert pipeline.
+#
+# FLOW:
+#   scrape_product(product_id)
+#     └─ ScraperFactory.create_scraper()         <- picks the right scraper class
+#     └─ scraper.extract_product_details(key)    <- fetches live data from the site
+#     └─ update_product fields                    <- price, availability, inventory
+#     └─ ProductSnapshot created                  <- immutable point-in-time record
+#     └─ update_product_with_details()            <- upserts ProductVariant rows
+#     └─ derives product-level availability       <- aggregated from variants
+#     └─ returns {success, product_id, snapshot_id}
+#
+# The result dict is then consumed by on_scrape_complete (tracked_product_tasks)
+# which triggers alert evaluation.
+# ---------------------------------------------------------------------------
+
 from celery_app.celery import celery
 from celery import chain
 from datetime import datetime
@@ -15,7 +39,17 @@ logger = logging.getLogger(__name__)
 
 @celery.task(bind=True, max_retries=3)
 def scrape_product(self, product_id, user_id=None):
-    """Scrape a single product and create a snapshot."""
+    """
+    Scrape a single product and create a point-in-time snapshot.
+
+    Called by:
+      - check_tracked_product (via Celery chain: scrape_product -> on_scrape_complete)
+      - Manually via API (POST /api/tracked-products/<id>/run)
+
+    Returns dict: {'success': True/False, 'product_id': ..., 'snapshot_id': ...}
+    This return value is automatically passed as the first argument to the
+    next task in the chain (on_scrape_complete).
+    """
     logger.info(f'Scraping product {product_id}')
     
     try:
@@ -33,26 +67,54 @@ def scrape_product(self, product_id, user_id=None):
                 logger.error(f'Website {product.website_id} not found')
                 return {'success': False, 'error': 'Website not found'}
             
-            # Use factory to get site-specific scraper
+            # ScraperFactory inspects website.base_url and returns the right scraper:
+            #   champssports.com -> ChampsSportsScraper
+            #   shopwss.com      -> ShopWssScraper
+            #   asos.com         -> AsosScraper
             scraper = ScraperFactory.create_scraper(website.id, website.base_url)
             if not scraper:
                 logger.error(f'No scraper available for {website.base_url}')
                 return {'success': False, 'error': 'No scraper available for this website'}
             
-            # ChampsSports takes a full URL; other scrapers take the last URL segment as SKU
+            # ---------------------------------------------------------------------------
+            # DETAIL KEY — what we pass to extract_product_details()
+            # ---------------------------------------------------------------------------
+            # Each scraper's extract_product_details() expects a different identifier:
+            #
+            #   ChampsSports  -> full product page URL
+            #                    e.g. https://www.champssports.com/product/nike-air-max/1234.html
+            #
+            #   ASOS          -> numeric product ID (last segment of URL, fragment stripped)
+            #                    e.g. product URL: .../prd/37463#colourWayId-123
+            #                         detail_key:  '37463'
+            #                    NOTE: ASOS URLs often have a #colourWayId-... fragment
+            #                    that must be stripped before splitting on '/'.
+            #
+            #   ShopWSS       -> product SKU / last URL segment
+            # ---------------------------------------------------------------------------
             if 'champssports.com' in website.base_url.lower():
                 detail_key = product.url
             else:
                 # Strip URL fragment (#colourWayId-... on ASOS) before extracting segment
                 clean_url = product.url.split('#')[0].rstrip('/')
                 detail_key = clean_url.split('/')[-1]
+
             data = scraper.extract_product_details(detail_key)
             if not data:
                 logger.warning(f'No data returned for product {product_id} (key={detail_key})')
                 return {'success': False, 'error': 'Scrape failed'}
 
-            # Update product-level fields only when present in response
-            # (ASOS extract_product_details returns variants-only; ShopWSS returns full product)
+            # ---------------------------------------------------------------------------
+            # UPDATE PRODUCT-LEVEL FIELDS
+            # ---------------------------------------------------------------------------
+            # Scrapers return different subsets of fields:
+            #   ASOS    -> variants only (no top-level price/availability)
+            #   ShopWSS -> full product data including price + availability
+            #   Champs  -> variants + top-level price + availability
+            #
+            # We only overwrite a field if the scraper actually returned it,
+            # so a partial response never clears existing data.
+            # ---------------------------------------------------------------------------
             new_price = data.get('price')
             if new_price:
                 product.price_previous = product.price_current
@@ -72,7 +134,16 @@ def scrape_product(self, product_id, user_id=None):
                 product.inventory_level = data['inventoryLevel']
             product.last_seen = datetime.utcnow()
 
-            # Snapshot price: fall back to current stored price when not in response (ASOS variants-only)
+            # ---------------------------------------------------------------------------
+            # CREATE SNAPSHOT
+            # ---------------------------------------------------------------------------
+            # A ProductSnapshot is an immutable record of the product state at this
+            # moment in time. The alert system compares consecutive snapshots to detect
+            # changes (price drop, back-in-stock, etc.).
+            #
+            # snapshot_price: use price from scraper response; fall back to the current
+            # stored price when the scraper returns variants-only (ASOS case).
+            # ---------------------------------------------------------------------------
             snapshot_price = new_price or (float(product.price_current) if product.price_current else None)
             snapshot = ProductSnapshot(
                 product_id=product_id,
@@ -86,7 +157,20 @@ def scrape_product(self, product_id, user_id=None):
             )
             db.session.add(snapshot)
 
-            # Upsert variants (works for both ASOS and ShopWSS)
+            # ---------------------------------------------------------------------------
+            # UPSERT VARIANTS
+            # ---------------------------------------------------------------------------
+            # update_product_with_details() creates or updates ProductVariant rows
+            # (one per size/colorway) from the variants list returned by the scraper.
+            # Each variant has: sku, size, color, price, available, inventoryLevel.
+            #
+            # ASOS SPECIAL CASE:
+            # The ASOS scraper returns variants but NOT a top-level availability field.
+            # So after upserting variants we aggregate them to derive the product-level
+            # availability: if ANY variant is available -> InStock, else OutOfStock.
+            # inventory_level = sum of all variant inventory quantities.
+            # We also backfill snapshot.availability with the derived value.
+            # ---------------------------------------------------------------------------
             if data.get('variants'):
                 from celery_app.tasks.discovery_tasks import update_product_with_details
                 update_product_with_details(product, data)
@@ -101,7 +185,7 @@ def scrape_product(self, product_id, user_id=None):
                     product.availability = 'InStock' if any_in_stock else 'OutOfStock'
                     if total_inv > 0:
                         product.inventory_level = total_inv
-                    # Update snapshot availability too
+                    # Update snapshot availability too so alert evaluation sees the right value
                     snapshot.availability = product.availability
 
             db.session.commit()

@@ -1,3 +1,31 @@
+# ---------------------------------------------------------------------------
+# alert_tasks.py
+# ---------------------------------------------------------------------------
+# TWO SEPARATE ALERT PIPELINES live here:
+#
+# 1. RULE-BASED ALERTS  (evaluate_alerts)
+#    Triggered during bulk crawls for every new product snapshot.
+#    Checks TrackingRule rows (keyword / brand / category rules set per website).
+#    e.g. "Alert me for any Nike product under $100 on ShopWSS"
+#
+# 2. TRACKED PRODUCT ALERTS  (evaluate_tracked_product_alerts)
+#    Triggered after scraping a specific product a user is watching.
+#    Checks TrackedProduct rows (per-product rules set by users).
+#    Supports price direction (above/below), size filters, availability filters.
+#    e.g. "Alert me when this exact ASOS product, size US 10, comes back in stock"
+#
+# BOTH pipelines share:
+#   - State hashing       -> prevents duplicate alerts for the same state
+#   - Cooldown windows    -> website.alert_cooldown_minutes (default 60 min)
+#   - send_discord_alert  -> builds embed, POSTs to Discord webhook(s)
+#   - _publish_realtime_alert -> pushes to Redis pub/sub for WebSocket clients
+#
+# DISCORD WEBHOOK PRIORITY:
+#   1. tracked_product.discord_webhook_url  (per-product, set by user)
+#   2. DiscordWebhook rows linked to website (site-level, set by admin)
+#   Both are sent to if both are configured.
+# ---------------------------------------------------------------------------
+
 from celery_app.celery import celery
 from datetime import datetime, timedelta
 import logging
@@ -18,6 +46,15 @@ logger = logging.getLogger(__name__)
 
 @celery.task(bind=True, max_retries=3)
 def evaluate_alerts(self, product_id, snapshot_id):
+    """
+    Rule-based alert evaluation for bulk crawls.
+
+    Called after a product snapshot is created during a site-wide crawl.
+    Checks every active TrackingRule for the website and fires alerts for
+    any matching rule that isn't in cooldown.
+
+    Alert types produced: new_match, price_drop, back_in_stock
+    """
     logger.info(f'Evaluating alerts for product {product_id}, snapshot {snapshot_id}')
     
     try:
@@ -92,6 +129,10 @@ def evaluate_alerts(self, product_id, snapshot_id):
 
 
 def _matches_rule(product: Product, rule: TrackingRule) -> bool:
+    """
+    Check whether a product matches a TrackingRule.
+    rule_type options: 'keyword' (title/brand), 'brand' (exact), 'category'
+    """
     if rule.rule_type == 'keyword':
         keyword = rule.rule_value.lower()
         title = (product.title or '').lower()
@@ -109,8 +150,12 @@ def _matches_rule(product: Product, rule: TrackingRule) -> bool:
     return False
 
 
-def _determine_alert_type(rule: TrackingRule, current: ProductSnapshot, 
+def _determine_alert_type(rule: TrackingRule, current: ProductSnapshot,
                           previous: ProductSnapshot) -> str:
+    """
+    Determine which alert type to fire (if any) by comparing two snapshots.
+    Returns: 'new_match', 'price_drop', 'back_in_stock', or None.
+    """
     if not previous and rule.alert_on_new:
         if rule.min_price and current.price and float(current.price) < float(rule.min_price):
             return None
@@ -149,29 +194,61 @@ def _determine_alert_type(rule: TrackingRule, current: ProductSnapshot,
 
 def _is_in_cooldown(product: Product, rule: TrackingRule, alert_type: str,
                     snapshot: ProductSnapshot, website: Website) -> bool:
+    """
+    Returns True if an identical alert was already sent within the cooldown window.
+
+    'Identical' is defined by state_hash: same rule + same price + same availability.
+    This prevents spam when a product stays in the same state across multiple crawls.
+    """
     state_hash = _compute_state_hash(rule.id, snapshot)
-    
+
     cooldown_minutes = website.alert_cooldown_minutes
     cutoff_time = datetime.utcnow() - timedelta(minutes=cooldown_minutes)
-    
+
     existing_alert = Alert.query.filter(
         Alert.product_id == product.id,
         Alert.alert_type == alert_type,
         Alert.state_hash == state_hash,
         Alert.sent_at >= cutoff_time
     ).first()
-    
+
     return existing_alert is not None
 
 
 def _compute_state_hash(rule_id: int, snapshot: ProductSnapshot) -> str:
+    """
+    Produce a fingerprint of (rule, price, availability) for deduplication.
+    If price and availability haven't changed since the last alert, the hash
+    will be identical and the cooldown check will suppress a new alert.
+    """
     hash_string = f"{rule_id}:{snapshot.price}:{snapshot.availability}"
     return hashlib.sha256(hash_string.encode()).hexdigest()
 
 
 @celery.task(bind=True, max_retries=3)
 def evaluate_tracked_product_alerts(self, product_id, snapshot_id):
-    """Evaluate alerts for tracked products with price direction, availability, and variant/size tracking."""
+    """
+    Tracked-product alert evaluation.
+
+    Called by on_scrape_complete after scraping a specifically tracked product.
+    Checks every TrackedProduct row for this product_id and evaluates:
+
+      1. PRICE DIRECTION RULE
+         tracked.price_direction = 'above' or 'below'
+         tracked.price_reference = the threshold price
+         -> fires 'price_increase' or 'price_drop' alert
+
+      2. VARIANT / SIZE TRACKING
+         tracked.size_filter = comma-separated sizes (e.g. '08.0,09.0')
+                               or empty = check ALL variants
+         tracked.availability_filter = 'InStock', 'OutOfStock', 'LowStock'
+                                        or empty = no filter
+         -> fires 'availability_match' alert with size + availability context
+            included in the Discord embed
+
+    Both checks can fire in the same evaluation run for the same TrackedProduct.
+    Each alert is independently deduplicated via state hash + cooldown.
+    """
     logger.info(f'Evaluating tracked product alerts for {product_id}, snapshot {snapshot_id}')
 
     try:
@@ -289,7 +366,12 @@ def evaluate_tracked_product_alerts(self, product_id, snapshot_id):
 
 
 def _is_tracked_product_in_cooldown(tracked_product, product, alert_type, snapshot, ctx=None):
-    """Check if alert is in cooldown for tracked product."""
+    """
+    Cooldown check for tracked-product alerts.
+    Same logic as _is_in_cooldown but uses _compute_tracked_state_hash which
+    includes the size from ctx so that alerts for different sizes don't block
+    each other's cooldowns.
+    """
     from app.models.website import Website
     website = Website.query.get(product.website_id)
 
@@ -308,7 +390,14 @@ def _is_tracked_product_in_cooldown(tracked_product, product, alert_type, snapsh
 
 
 def _compute_tracked_state_hash(tracked_product_id, snapshot, ctx=None):
-    """Compute state hash for tracked product alert (includes size context when present)."""
+    """
+    State hash for tracked-product alerts.
+    Includes the size key from ctx so that:
+      - size US 10 in stock and size US 11 in stock produce DIFFERENT hashes
+      - re-alerting on the same size at the same price is blocked by cooldown
+      - re-alerting on a DIFFERENT size is NOT blocked
+    Format: 'tp:<tracked_id>:<price>:<availability>:<size>'
+    """
     size_key = (ctx or {}).get('size', '')
     hash_string = f"tp:{tracked_product_id}:{snapshot.price}:{snapshot.availability}:{size_key}"
     return hashlib.sha256(hash_string.encode()).hexdigest()
@@ -316,6 +405,20 @@ def _compute_tracked_state_hash(tracked_product_id, snapshot, ctx=None):
 
 @celery.task(bind=True, max_retries=3)
 def send_discord_alert(self, alert_id, extra_context=None):
+    """
+    Send a Discord alert for a saved Alert row.
+
+    Webhook priority:
+      1. tracked_product.discord_webhook_url  (per-product URL stored on the TrackedProduct)
+      2. DiscordWebhook rows for the website  (site-level webhooks configured in settings)
+    Both are sent to if both are present (deduped by URL).
+
+    Also publishes to Redis pub/sub channel 'alerts:user:<user_id>' so connected
+    WebSocket clients get a real-time notification in the UI.
+
+    extra_context: dict passed from evaluate_tracked_product_alerts with size/color/
+    availability details for variant-level alerts. Used in embed description and fields.
+    """
     logger.info(f'Sending Discord alert {alert_id} ctx={extra_context}')
 
     try:
@@ -381,6 +484,21 @@ def send_discord_alert(self, alert_id, extra_context=None):
 
 
 def _create_discord_embed(alert: Alert, product: Product, snapshot: ProductSnapshot, ctx: dict = None) -> dict:
+    """
+    Build a Discord embed dict for the alert.
+
+    Structure:
+      title       = product name (clickable hyperlink via embed.url)
+      description = alert type emoji/label + optional size availability line
+      fields      = Brand, Price, Size, Color, Status, Inventory, SKU
+      thumbnail   = product image
+      color       = sidebar color by alert type
+
+    ctx (extra_context from variant alerts):
+      size, color, available, stock_state, variant_price
+    When ctx.size is present, the embed shows per-size availability instead of
+    the generic product-level status field.
+    """
     ctx = ctx or {}
     color_map = {
         'new_match': 0x00ff00,
@@ -450,16 +568,29 @@ def _create_discord_embed(alert: Alert, product: Product, snapshot: ProductSnaps
 
 
 def _send_to_discord(webhook_url: str, embed: dict):
+    """
+    POST the embed to a Discord webhook URL.
+    Discord expects {'embeds': [embed_dict]}.
+    Raises httpx.HTTPStatusError on non-2xx response.
+    """
     payload = {
         'embeds': [embed]
     }
-    
+
     with httpx.Client(timeout=10.0) as client:
         response = client.post(webhook_url, json=payload)
         response.raise_for_status()
 
 
 def _publish_realtime_alert(alert: Alert, product: Product, snapshot: ProductSnapshot):
+    """
+    Publish alert to Redis pub/sub so the Flask-SocketIO server can push it
+    to connected browser clients in real time.
+
+    Channel: 'alerts:user:<user_id>'
+    The frontend subscribes to this channel via WebSocket and appends the
+    alert to the notifications panel without a page refresh.
+    """
     try:
         r = redis.from_url(Config.REDIS_URL)
         

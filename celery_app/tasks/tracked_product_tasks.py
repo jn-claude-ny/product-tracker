@@ -1,6 +1,35 @@
 """
-Tracked Product Tasks - Priority-based product checking
-Handles crawling individual tracked products based on priority and crawl_period_hours
+tracked_product_tasks.py
+------------------------
+Manages the check lifecycle for products a user is specifically tracking
+(TrackedProduct rows). This is separate from bulk site crawls.
+
+TASK CHAIN (the whole flow for one tracked product check):
+
+  trigger_tracked_product_now(tracked_product_id)   <- API call or scheduler
+    -> _dispatch_check_chain()
+         -> chain(
+              scrape_product(product_id),           <- scrape_queue worker
+              on_scrape_complete(tracked_product_id) <- alert_queue worker
+            ).apply_async()
+                -> evaluate_tracked_product_alerts() <- alert_queue worker
+                     -> send_discord_alert()         <- alert_queue worker
+
+WHY A CHAIN instead of calling tasks sequentially:
+  Celery workers must NOT block waiting for another task's result (.get() inside a
+  task causes deadlocks). Instead, `chain()` passes the return value of each task
+  as the first argument to the next task automatically and asynchronously.
+
+PRIORITY QUEUES:
+  Five separate worker containers each listen on their own queue:
+    urgent_now        -> check_tracked_product_now / trigger_tracked_product_now
+    high_priority     -> check_tracked_product_high
+    moderate_priority -> check_tracked_product_moderate
+    normal_priority   -> check_tracked_product_normal
+
+  The priority is stored on TrackedProduct.priority and maps via PRIORITY_MAP.
+  schedule_tracked_products_check() runs every 5 minutes (via celery beat) and
+  dispatches each due product to its correct queue.
 """
 from celery import chain
 from celery_app.celery import celery
@@ -16,6 +45,8 @@ from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
+# Maps TrackedProduct.priority string -> Celery queue name
+# Queue names must match docker-compose.yml worker command -Q flags
 PRIORITY_MAP = {
     'now': 'urgent_now',
     'urgent': 'urgent_now',
