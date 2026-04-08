@@ -2,6 +2,7 @@
 Tracked Product Tasks - Priority-based product checking
 Handles crawling individual tracked products based on priority and crawl_period_hours
 """
+from celery import chain
 from celery_app.celery import celery
 from app import create_app
 from app.extensions import db
@@ -32,8 +33,8 @@ def get_queue_for_priority(priority):
 @celery.task(bind=True, max_retries=3)
 def check_tracked_product(self, tracked_product_id):
     """
-    Check a single tracked product - scrape and evaluate alerts.
-    This is the main task that gets dispatched based on priority.
+    Check a single tracked product — fire scrape then chain alert evaluation.
+    Uses Celery chain to avoid blocking result.get() inside a task.
     """
     app = create_app()
     with app.app_context():
@@ -41,75 +42,117 @@ def check_tracked_product(self, tracked_product_id):
         if not tracked:
             logger.warning(f"Tracked product {tracked_product_id} not found")
             return {'error': 'Tracked product not found'}
-        
-        # Check if product still exists
+
         product = Product.query.get(tracked.product_id)
         if not product:
             logger.warning(f"Product {tracked.product_id} not found for tracked product {tracked_product_id}")
             return {'error': 'Product not found'}
-        
-        try:
-            # Scrape the product
-            logger.info(f"Checking tracked product {product.title} (priority: {tracked.priority})")
-            result = scrape_product.delay(product.id, tracked.user_id)
-            
-            # Wait for scrape to complete and get result
-            scrape_result = result.get(timeout=60)
-            
-            if scrape_result.get('success'):
-                # Evaluate alerts based on new snapshot
-                snapshot_id = scrape_result.get('snapshot_id')
-                if snapshot_id:
-                    evaluate_tracked_product_alerts.delay(tracked.product_id, snapshot_id)
-                
-                # Update last checked time
-                tracked.updated_at = datetime.utcnow()
-                db.session.commit()
-                
-                return {
-                    'success': True,
-                    'product_id': tracked.product_id,
-                    'tracked_product_id': tracked_product_id,
-                    'snapshot_id': snapshot_id
-                }
-            else:
-                logger.error(f"Scrape failed for tracked product {tracked_product_id}: {scrape_result.get('error')}")
-                return {'error': scrape_result.get('error', 'Scrape failed')}
-                
-        except Exception as e:
-            logger.exception(f"Error checking tracked product {tracked_product_id}: {e}")
-            self.retry(countdown=60, exc=e)
-            raise
+
+        logger.info(f"Checking tracked product {product.title} (priority: {tracked.priority})")
+
+        # Use a chain: scrape → on_scrape_complete (which calls evaluate_alerts)
+        # This avoids blocking result.get() inside a worker task.
+        task_chain = chain(
+            scrape_product.s(product.id, tracked.user_id),
+            on_scrape_complete.s(tracked_product_id),
+        )
+        task_chain.apply_async(queue='scrape_queue')
+
+        return {'success': True, 'product_id': tracked.product_id, 'tracked_product_id': tracked_product_id}
+
+
+@celery.task(bind=True, max_retries=3)
+def on_scrape_complete(self, scrape_result, tracked_product_id):
+    """
+    Chain callback: called after scrape_product finishes.
+    Receives scrape_result dict, evaluates alerts, updates tracked product timestamp.
+    """
+    app = create_app()
+    with app.app_context():
+        if not scrape_result or not scrape_result.get('success'):
+            logger.warning(
+                f"Scrape failed for tracked_product {tracked_product_id}: "
+                f"{scrape_result.get('error') if scrape_result else 'no result'}"
+            )
+            return {'error': 'Scrape failed'}
+
+        snapshot_id = scrape_result.get('snapshot_id')
+        product_id  = scrape_result.get('product_id')
+
+        tracked = TrackedProduct.query.get(tracked_product_id)
+        if tracked:
+            tracked.updated_at = datetime.utcnow()
+            db.session.commit()
+
+        if snapshot_id:
+            logger.info(
+                f"Scrape succeeded for tracked_product {tracked_product_id} "
+                f"(product {product_id}, snapshot {snapshot_id}). Evaluating alerts."
+            )
+            evaluate_tracked_product_alerts.apply_async(
+                args=[product_id, snapshot_id],
+                queue='alert_queue'
+            )
+
+        return {'success': True, 'tracked_product_id': tracked_product_id,
+                'product_id': product_id, 'snapshot_id': snapshot_id}
+
+
+def _dispatch_check_chain(tracked_product_id):
+    """
+    Helper: build and dispatch the scrape → on_scrape_complete chain for a tracked product.
+    Returns a result dict immediately; alert evaluation happens asynchronously.
+    """
+    from app import create_app
+    from app.models.tracked_product import TrackedProduct
+    from app.models.product import Product
+    app = create_app()
+    with app.app_context():
+        tracked = TrackedProduct.query.get(tracked_product_id)
+        if not tracked:
+            logger.warning(f"Tracked product {tracked_product_id} not found")
+            return {'error': 'Tracked product not found'}
+        product = Product.query.get(tracked.product_id)
+        if not product:
+            logger.warning(f"Product {tracked.product_id} not found")
+            return {'error': 'Product not found'}
+        logger.info(f"Dispatching chain for tracked product {product.title} (priority: {tracked.priority})")
+        task_chain = chain(
+            scrape_product.s(product.id, tracked.user_id),
+            on_scrape_complete.s(tracked_product_id),
+        )
+        task_chain.apply_async(queue='scrape_queue')
+        return {'success': True, 'product_id': tracked.product_id, 'tracked_product_id': tracked_product_id}
 
 
 @celery.task(bind=True, max_retries=3)
 def check_tracked_product_now(self, tracked_product_id):
-    """Check tracked product immediately - bypasses all queues."""
-    return check_tracked_product(tracked_product_id)
+    """Check tracked product immediately."""
+    return _dispatch_check_chain(tracked_product_id)
 
 
 @celery.task(bind=True, max_retries=3)
 def check_tracked_product_urgent(self, tracked_product_id):
     """Check tracked product with urgent priority."""
-    return check_tracked_product(tracked_product_id)
+    return _dispatch_check_chain(tracked_product_id)
 
 
 @celery.task(bind=True, max_retries=3)
 def check_tracked_product_high(self, tracked_product_id):
     """Check tracked product with high priority."""
-    return check_tracked_product(tracked_product_id)
+    return _dispatch_check_chain(tracked_product_id)
 
 
 @celery.task(bind=True, max_retries=3)
 def check_tracked_product_moderate(self, tracked_product_id):
     """Check tracked product with moderate priority."""
-    return check_tracked_product(tracked_product_id)
+    return _dispatch_check_chain(tracked_product_id)
 
 
 @celery.task(bind=True, max_retries=3)
 def check_tracked_product_normal(self, tracked_product_id):
     """Check tracked product with normal priority."""
-    return check_tracked_product(tracked_product_id)
+    return _dispatch_check_chain(tracked_product_id)
 
 
 @celery.task(bind=True)
@@ -175,28 +218,8 @@ def schedule_tracked_products_check():
 def trigger_tracked_product_now(self, tracked_product_id):
     """
     Manually trigger a tracked product check immediately.
-    This bypasses the crawl_period_hours check.
+    Bypasses crawl_period_hours — dispatches scrape → alert chain directly.
     """
-    app = create_app()
-    with app.app_context():
-        tracked = TrackedProduct.query.get(tracked_product_id)
-        if not tracked:
-            return {'error': 'Tracked product not found'}
-        
-        # Force immediate check
-        tracked.priority = 'now'
-        db.session.commit()
-        
-        # Dispatch to urgent_now queue with highest priority
-        result = check_tracked_product_now.apply_async(
-            args=[tracked_product_id],
-            queue='urgent_now',
-            priority=0
-        )
-        
-        logger.info(f"Triggered immediate check for tracked product {tracked_product_id}")
-        return {
-            'success': True,
-            'tracked_product_id': tracked_product_id,
-            'task_id': result.id
-        }
+    logger.info(f"Triggered immediate check for tracked product {tracked_product_id}")
+    result = _dispatch_check_chain(tracked_product_id)
+    return {'success': True, 'tracked_product_id': tracked_product_id, **result}

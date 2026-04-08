@@ -1,0 +1,5 @@
+app/scraping/champ_data
+app/scraping/champ_data_linux
+*.pyc
+__pycache__
+.git

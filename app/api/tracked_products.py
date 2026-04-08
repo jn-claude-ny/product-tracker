@@ -20,19 +20,37 @@ class TrackedProductSchema(Schema):
     price_condition = fields.Str(validate=lambda x: x in ['greater_than', 'less_than', 'equal_to'], allow_none=True)
     price_threshold = fields.Decimal(places=2, allow_none=True)
     size_filter = fields.List(fields.Str(), allow_none=True)
+    availability_filter = fields.Str(allow_none=True)
     discord_webhook_url = fields.Str(allow_none=True)
     created_at = fields.DateTime(dump_only=True)
     updated_at = fields.DateTime(dump_only=True)
 
-    # Include product details
+    # Include product details + variants
     product = fields.Method('get_product_details', dump_only=True)
 
     def get_product_details(self, obj):
         if obj.product:
-            # Get latest price from snapshots
             from app.models.product_snapshot import ProductSnapshot
             latest_snapshot = ProductSnapshot.query.filter_by(product_id=obj.product.id).order_by(db.desc('created_at')).first()
             latest_price = float(latest_snapshot.price) if latest_snapshot and latest_snapshot.price else None
+
+            variants = []
+            try:
+                if obj.product.variants.count() > 0:
+                    for v in obj.product.variants:
+                        variants.append({
+                            'id': v.id,
+                            'variant_sku': v.variant_sku,
+                            'size': v.size,
+                            'color': v.color,
+                            'price': float(v.price) if v.price else None,
+                            'available': v.available,
+                            'stock_state': v.stock_state,
+                            'inventory_level': v.inventory_level,
+                            'last_checked': v.last_checked.isoformat() if v.last_checked else None,
+                        })
+            except Exception:
+                pass
 
             return {
                 'id': obj.product.id,
@@ -40,8 +58,12 @@ class TrackedProductSchema(Schema):
                 'url': obj.product.url,
                 'image': obj.product.image,
                 'price': latest_price,
+                'price_current': float(obj.product.price_current) if obj.product.price_current else None,
+                'availability': obj.product.availability,
+                'available': obj.product.available,
                 'brand': obj.product.brand,
-                'sku': obj.product.sku
+                'sku': obj.product.sku,
+                'variants': variants
             }
         return None
 
@@ -50,7 +72,7 @@ class TrackedProductSchema(Schema):
 @jwt_required()
 def get_tracked_products():
     user_id = int(get_jwt_identity())
-    tracked_products = TrackedProduct.query.filter_by(user_id=user_id).all()
+    tracked_products = TrackedProduct.query.filter_by(user_id=user_id).order_by(TrackedProduct.created_at.desc()).all()
 
     schema = TrackedProductSchema(many=True)
     return jsonify(schema.dump(tracked_products)), 200
@@ -89,6 +111,12 @@ def create_tracked_product():
     # Set price reference if price_direction is provided
     if data.get('price_direction') and product.price_current:
         data['price_reference'] = float(product.price_current)
+
+    # Normalise crawl_period_hours from human-readable schedule keys
+    schedule_map = {'hourly': 1, 'every_6_hours': 6, 'every_12_hours': 12, 'daily': 24, 'weekly': 168}
+    schedule_key = request.json.get('schedule')
+    if schedule_key and schedule_key in schedule_map:
+        data['crawl_period_hours'] = schedule_map[schedule_key]
 
     # Create tracked product
     tracked_product = TrackedProduct(
@@ -138,6 +166,32 @@ def update_tracked_product(tracked_product_id):
 
     response_schema = TrackedProductSchema()
     return jsonify(response_schema.dump(tracked_product)), 200
+
+
+@bp.route('/<int:tracked_product_id>/run', methods=['POST'])
+@jwt_required()
+def run_tracked_product_now(tracked_product_id):
+    """Manually trigger an immediate check for a tracked product."""
+    user_id = int(get_jwt_identity())
+
+    tracked_product = TrackedProduct.query.filter_by(
+        id=tracked_product_id,
+        user_id=user_id
+    ).first()
+
+    if not tracked_product:
+        return jsonify({'error': 'Tracked product not found'}), 404
+
+    try:
+        from celery_app.tasks.tracked_product_tasks import trigger_tracked_product_now
+        result = trigger_tracked_product_now.delay(tracked_product.id)
+        return jsonify({
+            'success': True,
+            'task_id': result.id,
+            'tracked_product_id': tracked_product_id
+        }), 202
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @bp.route('/<int:tracked_product_id>', methods=['DELETE'])

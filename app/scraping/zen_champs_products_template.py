@@ -11,7 +11,7 @@ proxies = {
 }
 
 async def extract_api_data():
-    browser = await zd.start(headless=True,proxy=proxies, user_data_dir=r"D:\AI\Freelance\champssports\phase_2\zendriver\champ_data")
+    browser = await zd.start(headless=True,proxy=proxies, user_data_dir=r"D:\AI\product-tracker\app\scraping\champ_data")
     tab = await browser.get("about:blank")
     
     try:

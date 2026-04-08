@@ -42,4 +42,246 @@ celerybeat.pid
 postgres_data/
 redis_data/
 elasticsearch_data/
-.env.example
+app/scraping/champ_data/first_party_sets.db
+app/scraping/champ_data/first_party_sets.db-journal
+app/scraping/champ_data/Last Version
+app/scraping/champ_data/Local State
+app/scraping/champ_data/SingletonCookie
+app/scraping/champ_data/SingletonLock
+app/scraping/champ_data/SingletonSocket
+app/scraping/champ_data/Variations
+app/scraping/champ_data/Default/.com.google.Chrome.FFWn0O
+app/scraping/champ_data/Default/Account Web Data
+app/scraping/champ_data/Default/Account Web Data-journal
+app/scraping/champ_data/Default/Affiliation Database
+app/scraping/champ_data/Default/Affiliation Database-journal
+app/scraping/champ_data/Default/BookmarkMergedSurfaceOrdering
+app/scraping/champ_data/Default/BrowsingTopicsSiteData
+app/scraping/champ_data/Default/BrowsingTopicsSiteData-journal
+app/scraping/champ_data/Default/BrowsingTopicsState
+app/scraping/champ_data/Default/Cookies
+app/scraping/champ_data/Default/Cookies-journal
+app/scraping/champ_data/Default/DIPS
+app/scraping/champ_data/Default/DIPS-wal
+app/scraping/champ_data/Default/Favicons
+app/scraping/champ_data/Default/Favicons-journal
+app/scraping/champ_data/Default/heavy_ad_intervention_opt_out.db
+app/scraping/champ_data/Default/heavy_ad_intervention_opt_out.db-journal
+app/scraping/champ_data/Default/History
+app/scraping/champ_data/Default/History-journal
+app/scraping/champ_data/Default/LOCK
+app/scraping/champ_data/Default/LOG
+app/scraping/champ_data/Default/LOG.old
+app/scraping/champ_data/Default/Login Data
+app/scraping/champ_data/Default/Login Data For Account
+app/scraping/champ_data/Default/Login Data For Account-journal
+app/scraping/champ_data/Default/Login Data-journal
+app/scraping/champ_data/Default/Network Action Predictor
+app/scraping/champ_data/Default/Network Action Predictor-journal
+app/scraping/champ_data/Default/Network Persistent State
+app/scraping/champ_data/Default/Preferences
+app/scraping/champ_data/Default/PreferredApps
+app/scraping/champ_data/Default/README
+app/scraping/champ_data/Default/Reporting and NEL
+app/scraping/champ_data/Default/Reporting and NEL-journal
+app/scraping/champ_data/Default/Safe Browsing Cookies
+app/scraping/champ_data/Default/Safe Browsing Cookies-journal
+app/scraping/champ_data/Default/Secure Preferences
+app/scraping/champ_data/Default/ServerCertificate
+app/scraping/champ_data/Default/ServerCertificate-journal
+app/scraping/champ_data/Default/SharedStorage
+app/scraping/champ_data/Default/SharedStorage-wal
+app/scraping/champ_data/Default/Shortcuts
+app/scraping/champ_data/Default/Shortcuts-journal
+app/scraping/champ_data/Default/Top Sites
+app/scraping/champ_data/Default/Top Sites-journal
+app/scraping/champ_data/Default/TransportSecurity
+app/scraping/champ_data/Default/Trust Tokens
+app/scraping/champ_data/Default/Trust Tokens-journal
+app/scraping/champ_data/Default/trusted_vault.pb
+app/scraping/champ_data/Default/Web Data
+app/scraping/champ_data/Default/Web Data-journal
+app/scraping/champ_data/Default/AutofillAiModelCache/LOCK
+app/scraping/champ_data/Default/AutofillAiModelCache/LOG
+app/scraping/champ_data/Default/AutofillStrikeDatabase/LOCK
+app/scraping/champ_data/Default/AutofillStrikeDatabase/LOG
+app/scraping/champ_data/Default/BudgetDatabase/LOCK
+app/scraping/champ_data/Default/BudgetDatabase/LOG
+app/scraping/champ_data/Default/Cache/Cache_Data/62c03430d4541ef8_0
+app/scraping/champ_data/Default/Cache/Cache_Data/87b255aab4c1e3a1_0
+app/scraping/champ_data/Default/Cache/Cache_Data/c1d1ca2490b5051d_0
+app/scraping/champ_data/Default/Cache/Cache_Data/d74fbc21ad6f7122_0
+app/scraping/champ_data/Default/Cache/Cache_Data/e70146d64cb4638f_0
+app/scraping/champ_data/Default/Cache/Cache_Data/ed938dbba27b5065_0
+app/scraping/champ_data/Default/Cache/Cache_Data/ed5152d08612b2ae_0
+app/scraping/champ_data/Default/Cache/Cache_Data/f1f98e65a3b16a52_0
+app/scraping/champ_data/Default/Cache/Cache_Data/index
+app/scraping/champ_data/Default/Cache/Cache_Data/todelete_ed5152d08612b2ae_0_1
+app/scraping/champ_data/Default/Cache/Cache_Data/index-dir/the-real-index
+app/scraping/champ_data/Default/Cache/No_Vary_Search/journal.baj
+app/scraping/champ_data/Default/Cache/No_Vary_Search/snapshot.baf
+app/scraping/champ_data/Default/ClientCertificates/LOCK
+app/scraping/champ_data/Default/ClientCertificates/LOG
+app/scraping/champ_data/Default/ClientCertificates/LOG.old
+app/scraping/champ_data/Default/Code Cache/js/index
+app/scraping/champ_data/Default/Code Cache/js/index-dir/the-real-index
+app/scraping/champ_data/Default/Code Cache/wasm/index
+app/scraping/champ_data/Default/Code Cache/wasm/index-dir/the-real-index
+app/scraping/champ_data/Default/DawnGraphiteCache/data_0
+app/scraping/champ_data/Default/DawnGraphiteCache/data_1
+app/scraping/champ_data/Default/DawnGraphiteCache/data_2
+app/scraping/champ_data/Default/DawnGraphiteCache/data_3
+app/scraping/champ_data/Default/DawnGraphiteCache/index
+app/scraping/champ_data/Default/DawnWebGPUCache/data_0
+app/scraping/champ_data/Default/DawnWebGPUCache/data_1
+app/scraping/champ_data/Default/DawnWebGPUCache/data_2
+app/scraping/champ_data/Default/DawnWebGPUCache/data_3
+app/scraping/champ_data/Default/DawnWebGPUCache/index
+app/scraping/champ_data/Default/Download Service/EntryDB/LOCK
+app/scraping/champ_data/Default/Download Service/EntryDB/LOG
+app/scraping/champ_data/Default/Download Service/Files/470fd98c-45d3-4374-a36d-676455230df9
+app/scraping/champ_data/Default/Download Service/Files/acfe0599-37fe-4705-88e4-24baf68b4834
+app/scraping/champ_data/Default/Download Service/Files/Unconfirmed 372057.crdownload
+app/scraping/champ_data/Default/Extension Rules/CURRENT
+app/scraping/champ_data/Default/Extension Rules/LOCK
+app/scraping/champ_data/Default/Extension Rules/LOG
+app/scraping/champ_data/Default/Extension Rules/MANIFEST-000001
+app/scraping/champ_data/Default/Extension Scripts/CURRENT
+app/scraping/champ_data/Default/Extension Scripts/LOCK
+app/scraping/champ_data/Default/Extension Scripts/LOG
+app/scraping/champ_data/Default/Extension Scripts/MANIFEST-000001
+app/scraping/champ_data/Default/Extension State/CURRENT
+app/scraping/champ_data/Default/Extension State/LOCK
+app/scraping/champ_data/Default/Extension State/LOG
+app/scraping/champ_data/Default/Extension State/MANIFEST-000001
+app/scraping/champ_data/Default/Feature Engagement Tracker/AvailabilityDB/LOCK
+app/scraping/champ_data/Default/Feature Engagement Tracker/AvailabilityDB/LOG
+app/scraping/champ_data/Default/Feature Engagement Tracker/EventDB/LOCK
+app/scraping/champ_data/Default/Feature Engagement Tracker/EventDB/LOG
+app/scraping/champ_data/Default/GCM Store/CURRENT
+app/scraping/champ_data/Default/GCM Store/LOCK
+app/scraping/champ_data/Default/GCM Store/LOG
+app/scraping/champ_data/Default/GCM Store/MANIFEST-000001
+app/scraping/champ_data/Default/GCM Store/Encryption/CURRENT
+app/scraping/champ_data/Default/GCM Store/Encryption/LOCK
+app/scraping/champ_data/Default/GCM Store/Encryption/LOG
+app/scraping/champ_data/Default/GCM Store/Encryption/MANIFEST-000001
+app/scraping/champ_data/Default/GPUCache/data_0
+app/scraping/champ_data/Default/GPUCache/data_1
+app/scraping/champ_data/Default/GPUCache/data_2
+app/scraping/champ_data/Default/GPUCache/data_3
+app/scraping/champ_data/Default/GPUCache/index
+app/scraping/champ_data/Default/Local Storage/leveldb/CURRENT
+app/scraping/champ_data/Default/Local Storage/leveldb/LOCK
+app/scraping/champ_data/Default/Local Storage/leveldb/LOG
+app/scraping/champ_data/Default/Local Storage/leveldb/LOG.old
+app/scraping/champ_data/Default/Local Storage/leveldb/MANIFEST-000001
+app/scraping/champ_data/Default/PersistentOriginTrials/LOCK
+app/scraping/champ_data/Default/PersistentOriginTrials/LOG
+app/scraping/champ_data/Default/PersistentOriginTrials/LOG.old
+app/scraping/champ_data/Default/Segmentation Platform/SegmentInfoDB/LOCK
+app/scraping/champ_data/Default/Segmentation Platform/SegmentInfoDB/LOG
+app/scraping/champ_data/Default/Segmentation Platform/SegmentInfoDB/LOG.old
+app/scraping/champ_data/Default/Segmentation Platform/SignalDB/LOCK
+app/scraping/champ_data/Default/Segmentation Platform/SignalDB/LOG
+app/scraping/champ_data/Default/Segmentation Platform/SignalDB/LOG.old
+app/scraping/champ_data/Default/Segmentation Platform/SignalStorageConfigDB/LOCK
+app/scraping/champ_data/Default/Segmentation Platform/SignalStorageConfigDB/LOG
+app/scraping/champ_data/Default/Segmentation Platform/SignalStorageConfigDB/LOG.old
+app/scraping/champ_data/Default/Service Worker/Database/CURRENT
+app/scraping/champ_data/Default/Service Worker/Database/LOCK
+app/scraping/champ_data/Default/Service Worker/Database/LOG
+app/scraping/champ_data/Default/Service Worker/Database/MANIFEST-000001
+app/scraping/champ_data/Default/Service Worker/ScriptCache/2cc80dabc69f58b6_0
+app/scraping/champ_data/Default/Service Worker/ScriptCache/4cb013792b196a35_0
+app/scraping/champ_data/Default/Service Worker/ScriptCache/4cb013792b196a35_1
+app/scraping/champ_data/Default/Service Worker/ScriptCache/index
+app/scraping/champ_data/Default/Service Worker/ScriptCache/index-dir/the-real-index
+app/scraping/champ_data/Default/Session Storage/CURRENT
+app/scraping/champ_data/Default/Session Storage/LOCK
+app/scraping/champ_data/Default/Session Storage/LOG
+app/scraping/champ_data/Default/Session Storage/LOG.old
+app/scraping/champ_data/Default/Session Storage/MANIFEST-000001
+app/scraping/champ_data/Default/Sessions/Session_13420017754240624
+app/scraping/champ_data/Default/Shared Dictionary/db
+app/scraping/champ_data/Default/Shared Dictionary/db-journal
+app/scraping/champ_data/Default/Shared Dictionary/cache/index
+app/scraping/champ_data/Default/Shared Dictionary/cache/index-dir/the-real-index
+app/scraping/champ_data/Default/Site Characteristics Database/CURRENT
+app/scraping/champ_data/Default/Site Characteristics Database/LOCK
+app/scraping/champ_data/Default/Site Characteristics Database/LOG
+app/scraping/champ_data/Default/Site Characteristics Database/LOG.old
+app/scraping/champ_data/Default/Site Characteristics Database/MANIFEST-000001
+app/scraping/champ_data/Default/Sync Data/LevelDB/CURRENT
+app/scraping/champ_data/Default/Sync Data/LevelDB/LOCK
+app/scraping/champ_data/Default/Sync Data/LevelDB/LOG
+app/scraping/champ_data/Default/Sync Data/LevelDB/LOG.old
+app/scraping/champ_data/Default/Sync Data/LevelDB/MANIFEST-000001
+app/scraping/champ_data/Default/WebStorage/QuotaManager
+app/scraping/champ_data/Default/WebStorage/QuotaManager-journal
+app/scraping/champ_data/Default/chrome_cart_db/LOCK
+app/scraping/champ_data/Default/chrome_cart_db/LOG
+app/scraping/champ_data/Default/chrome_cart_db/LOG.old
+app/scraping/champ_data/Default/commerce_subscription_db/LOCK
+app/scraping/champ_data/Default/commerce_subscription_db/LOG
+app/scraping/champ_data/Default/commerce_subscription_db/LOG.old
+app/scraping/champ_data/Default/discount_infos_db/LOCK
+app/scraping/champ_data/Default/discount_infos_db/LOG
+app/scraping/champ_data/Default/discount_infos_db/LOG.old
+app/scraping/champ_data/Default/discounts_db/LOCK
+app/scraping/champ_data/Default/discounts_db/LOG
+app/scraping/champ_data/Default/discounts_db/LOG.old
+app/scraping/champ_data/Default/optimization_guide_hint_cache_store/LOCK
+app/scraping/champ_data/Default/optimization_guide_hint_cache_store/LOG
+app/scraping/champ_data/Default/parcel_tracking_db/LOCK
+app/scraping/champ_data/Default/parcel_tracking_db/LOG
+app/scraping/champ_data/Default/parcel_tracking_db/LOG.old
+app/scraping/champ_data/Default/shared_proto_db/CURRENT
+app/scraping/champ_data/Default/shared_proto_db/LOCK
+app/scraping/champ_data/Default/shared_proto_db/LOG
+app/scraping/champ_data/Default/shared_proto_db/MANIFEST-000001
+app/scraping/champ_data/Default/shared_proto_db/metadata/CURRENT
+app/scraping/champ_data/Default/shared_proto_db/metadata/LOCK
+app/scraping/champ_data/Default/shared_proto_db/metadata/LOG
+app/scraping/champ_data/Default/shared_proto_db/metadata/LOG.old
+app/scraping/champ_data/Default/shared_proto_db/metadata/MANIFEST-000001
+app/scraping/champ_data/Dictionaries/en-US-10-1.bdic
+app/scraping/champ_data/GrShaderCache/data_0
+app/scraping/champ_data/GrShaderCache/data_1
+app/scraping/champ_data/GrShaderCache/data_2
+app/scraping/champ_data/GrShaderCache/data_3
+app/scraping/champ_data/GrShaderCache/index
+app/scraping/champ_data/GraphiteDawnCache/data_0
+app/scraping/champ_data/GraphiteDawnCache/data_1
+app/scraping/champ_data/GraphiteDawnCache/data_2
+app/scraping/champ_data/GraphiteDawnCache/data_3
+app/scraping/champ_data/GraphiteDawnCache/index
+app/scraping/champ_data/ShaderCache/data_0
+app/scraping/champ_data/ShaderCache/data_1
+app/scraping/champ_data/ShaderCache/data_2
+app/scraping/champ_data/ShaderCache/data_3
+app/scraping/champ_data/ShaderCache/index
+app/scraping/champ_data/component_crx_cache/metadata.json
+app/scraping/champ_data/extensions_crx_cache/metadata.json
+app/scraping/champ_data/optimization_guide_model_store/13/E6DC4029A1E4B4C1/AE3BE95F1D39A1FE/model-info.pb
+app/scraping/champ_data/optimization_guide_model_store/13/E6DC4029A1E4B4C1/AE3BE95F1D39A1FE/model.tflite
+app/scraping/champ_data/optimization_guide_model_store/15/E6DC4029A1E4B4C1/7C6AAE5BA8F34060/model-info.pb
+app/scraping/champ_data/optimization_guide_model_store/15/E6DC4029A1E4B4C1/7C6AAE5BA8F34060/model.tflite
+app/scraping/champ_data/optimization_guide_model_store/15/E6DC4029A1E4B4C1/7C6AAE5BA8F34060/override_list.pb.gz
+app/scraping/champ_data/optimization_guide_model_store/15/E6DC4029A1E4B4C1/7C6AAE5BA8F34060/VERSION.txt
+app/scraping/champ_data/optimization_guide_model_store/2/E6DC4029A1E4B4C1/380AB929DB1FFF44/model-info.pb
+app/scraping/champ_data/optimization_guide_model_store/2/E6DC4029A1E4B4C1/380AB929DB1FFF44/model.tflite
+app/scraping/champ_data/optimization_guide_model_store/20/E6DC4029A1E4B4C1/ABCE38C30C1B6AD0/model-info.pb
+app/scraping/champ_data/optimization_guide_model_store/20/E6DC4029A1E4B4C1/ABCE38C30C1B6AD0/model.tflite
+app/scraping/champ_data/optimization_guide_model_store/24/E6DC4029A1E4B4C1/FA8A3486B9F807D7/enus_denylist_encoded_241007.txt
+app/scraping/champ_data/optimization_guide_model_store/24/E6DC4029A1E4B4C1/FA8A3486B9F807D7/model-info.pb
+app/scraping/champ_data/optimization_guide_model_store/24/E6DC4029A1E4B4C1/FA8A3486B9F807D7/model.tflite
+app/scraping/champ_data/optimization_guide_model_store/24/E6DC4029A1E4B4C1/FA8A3486B9F807D7/vocab_en-us.txt
+app/scraping/champ_data/optimization_guide_model_store/25/E6DC4029A1E4B4C1/1614CFD35A6B33F2/model-info.pb
+app/scraping/champ_data/optimization_guide_model_store/25/E6DC4029A1E4B4C1/1614CFD35A6B33F2/visual_model_desktop.tflite
+app/scraping/champ_data/optimization_guide_model_store/26/E6DC4029A1E4B4C1/9C39DE4EC60D1B34/model-info.pb
+app/scraping/champ_data/optimization_guide_model_store/26/E6DC4029A1E4B4C1/9C39DE4EC60D1B34/model.tflite
+app/scraping/champ_data/optimization_guide_model_store/9/E6DC4029A1E4B4C1/9F21646093262F32/model-info.pb
+app/scraping/champ_data/optimization_guide_model_store/9/E6DC4029A1E4B4C1/9F21646093262F32/model.tflite
+app/scraping/champ_data/segmentation_platform/ukm_db
+app/scraping/champ_data/segmentation_platform/ukm_db-wal

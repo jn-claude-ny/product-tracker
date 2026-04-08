@@ -26,7 +26,7 @@ REFRESH_QUERY = (
     " search( accountId: $accountId query: $query  products: $products ) {"
     " query products { hits { productId url name imageUrl brand availability price"
     " priceCurrencyCode inventoryLevel available"
-    " skus { id name price url imageUrl inventoryLevel availability } } } }}"
+    " skus { id name price url imageUrl inventoryLevel availability customFields { key value } } } } }}"
 )
 
 

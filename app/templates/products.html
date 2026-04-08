@@ -176,13 +176,19 @@
                             
                             <!-- Availability & Track Button Row -->
                             <div class="flex items-center justify-between mb-3">
-                                <span class="text-xs px-2 py-1 rounded-full"
-                                      :class="{
-                                          'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200': product.availability === 'InStock',
-                                          'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200': product.availability === 'OutOfStock',
-                                          'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200': product.availability === 'LowStock'
-                                      }"
-                                      x-text="product.availability || 'Unknown'"></span>
+                                <div class="flex items-center gap-1.5">
+                                    <span class="text-xs px-2 py-1 rounded-full"
+                                          :class="{
+                                              'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200': product.availability === 'InStock',
+                                              'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200': product.availability === 'OutOfStock',
+                                              'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200': product.availability === 'LowStock',
+                                              'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400': !product.availability
+                                          }"
+                                          x-text="product.availability || 'Unknown'"></span>
+                                    <span x-show="product.inventory_level != null"
+                                          class="text-xs text-gray-500 dark:text-gray-400"
+                                          x-text="'(' + product.inventory_level + ' in stock)'"></span>
+                                </div>
                                 
                                 <button @click="openTrackingModal(product)" 
                                         class="flex items-center gap-1 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg text-sm font-medium hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors">
@@ -390,6 +396,25 @@
                                 Estimated check interval based on priority
                             </p>
                         </div>
+
+                        <!-- Check Schedule -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium mb-2" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">
+                                Check Schedule
+                            </label>
+                            <select x-model="trackingFilters.schedule"
+                                    class="w-full px-4 py-2 rounded-lg border"
+                                    :class="darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-300 text-gray-900'">
+                                <option value="hourly">⏰ Every Hour</option>
+                                <option value="every_6_hours">🕒 Every 6 Hours</option>
+                                <option value="every_12_hours">🕓 Every 12 Hours</option>
+                                <option value="daily" selected>📅 Daily</option>
+                                <option value="weekly">🗓️ Weekly</option>
+                            </select>
+                            <p class="mt-1 text-xs" :class="darkMode ? 'text-gray-400' : 'text-gray-500'">
+                                How often to re-check this product for changes
+                            </p>
+                        </div>
                     </div>
                 </div>
                 
@@ -511,7 +536,8 @@
                 selectedSizes: [],
                 priceDirection: '',  // 'above' or 'below'
                 availability: '',
-                priority: 'normal'
+                priority: 'normal',
+                schedule: 'daily'
             },
             showTaskModal: false,
             taskProduct: null,
@@ -734,7 +760,8 @@
                         selectedSizes: [],
                         priceDirection: '',
                         availability: '',
-                        priority: 'normal'
+                        priority: 'normal',
+                        schedule: 'daily'
                     };
                     this.showTrackingModal = true;
                 })
@@ -747,7 +774,8 @@
                         selectedSizes: [],
                         priceDirection: '',
                         availability: '',
-                        priority: 'normal'
+                        priority: 'normal',
+                        schedule: 'daily'
                     };
                     this.showTrackingModal = true;
                 });
@@ -770,14 +798,16 @@
             async trackProduct(product, filters) {
                 const token = localStorage.getItem('access_token');
                 try {
-                    // Build request body with price direction
+                    // Build request body with price direction, sizes, availability, schedule
                     const body = {
                         product_id: product.id,
                         priority: filters.priority,
+                        schedule: filters.schedule || 'daily',
                         price_direction: filters.priceDirection || null,
                         size_filter: filters.selectedSizes && filters.selectedSizes.length > 0 
                             ? filters.selectedSizes 
-                            : null
+                            : null,
+                        availability_filter: filters.availability || null
                     };
                     
                     const response = await fetch('/api/tracked-products', {

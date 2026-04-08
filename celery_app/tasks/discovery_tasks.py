@@ -15,7 +15,7 @@ from app.scraping.scraper_factory import ScraperFactory
 logger = logging.getLogger(__name__)
 
 
-@celery.task(bind=True, max_retries=3)
+@celery.task(bind=True, max_retries=3, queue='scrape_queue')
 def discover_products_task(self, website_id: int, gender: str, limit: int = None):
     """
     Discover products for a website using appropriate scraper.

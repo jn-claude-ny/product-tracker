@@ -1,229 +1,404 @@
-# Product Tracker Platform
+# Product Tracker
 
-Production-grade, multi-user e-commerce product tracking platform with automated scraping, real-time alerts, and intelligent scheduling.
+Multi-site e-commerce product tracker with automated scraping, variant/size tracking, price alerts, and Discord notifications. Supports **ASOS**, **Shop WSS**, and **Champs Sports**.
+
+---
+
+## Table of Contents
+
+1. [Architecture](#architecture)
+2. [Prerequisites](#prerequisites)
+3. [Installation](#installation)
+4. [Configuration](#configuration)
+5. [Running the App](#running-the-app)
+6. [First-Time Setup](#first-time-setup)
+7. [Usage](#usage)
+8. [Tracked Products & Alerts](#tracked-products--alerts)
+9. [API Reference](#api-reference)
+10. [Project Structure](#project-structure)
+11. [Celery Workers & Queues](#celery-workers--queues)
+12. [Monitoring](#monitoring)
+
+---
 
 ## Architecture
 
-- **Flask API** - REST + WebSocket for real-time updates
-- **PostgreSQL** - Primary database with partitioned snapshots
-- **Redis** - Caching, message broker, and pub/sub
-- **Celery Workers** - Distributed task processing (crawl, scrape, alert, index queues)
-- **Celery Beat** - Dynamic scheduler reading cron schedules from database
-- **Playwright** - Browser automation with connection pooling
-- **Elasticsearch** - Full-text product search with ILM policies
-- **Nginx** - Reverse proxy and static file serving
-- **Discord** - Rich embed alert notifications
+| Component | Purpose |
+|---|---|
+| **Flask** | REST API + Jinja2 UI + WebSocket (SocketIO) |
+| **PostgreSQL** | Products, variants, snapshots, alerts, tracked products |
+| **Redis** | Celery broker/backend + pub/sub for real-time alerts |
+| **Celery Workers** | Distributed async task processing |
+| **Celery Beat** | Periodic scheduled crawls |
+| **Elasticsearch** | Full-text product search |
+| **Nginx** | Reverse proxy + static assets |
+| **BrightData** | Residential proxy for scraping |
 
-## Quick Start
+---
+
+## Prerequisites
+
+- [Docker](https://docs.docker.com/get-docker/) + [Docker Compose](https://docs.docker.com/compose/) (v2)
+- A **BrightData** account with a residential proxy zone (required for Champs Sports; optional for ASOS/WSS)
+- A **Discord webhook URL** (one per site you want alerts for)
+
+---
+
+## Installation
 
 ```bash
-docker compose up --build
+git clone <repo-url>
+cd product-tracker
+cp .env.example .env
 ```
 
-The application will be available at:
-- **Web UI**: http://localhost:8080
-- **API**: http://localhost:8080/api
-- **Flower** (Celery monitoring): http://localhost:5555
-- **Elasticsearch**: http://localhost:9200
+Edit `.env` with your secrets (see [Configuration](#configuration)), then:
 
-## Initial Setup
+```bash
+docker compose up --build -d
+```
 
-1. Run database migrations:
+---
+
+## Configuration
+
+All configuration is via `.env`. Copy `.env.example` as a starting point:
+
+```env
+# Flask
+FLASK_ENV=production
+SECRET_KEY=<generate with: python -c "import secrets; print(secrets.token_hex(32))">
+JWT_SECRET_KEY=<generate separately>
+
+# Database
+DATABASE_URL=postgresql://postgres:postgres@postgres:5432/product_tracker
+
+# Redis
+REDIS_URL=redis://redis:6379/0
+
+# Elasticsearch
+ELASTICSEARCH_URL=http://elasticsearch:9200
+
+# Celery
+CELERY_BROKER_URL=redis://redis:6379/0
+CELERY_RESULT_BACKEND=redis://redis:6379/1
+
+# BrightData residential proxy (required for Champs Sports)
+BRIGHTDATA_PROXY_HOST=brd.superproxy.io
+BRIGHTDATA_PROXY_PORT=33335
+BRIGHTDATA_PROXY_USERNAME=<your-brightdata-username>
+BRIGHTDATA_PROXY_PASSWORD=<your-brightdata-password>
+
+# Optional
+SENTRY_DSN=
+CORS_ORIGINS=http://localhost,http://localhost:5000,http://<YOUR_SERVER_IP>
+```
+
+> **Security**: never commit `.env`. It is in `.gitignore`.
+
+---
+
+## Running the App
+
+### Start everything
+
+```bash
+docker compose up -d
+```
+
+### Stop
+
+```bash
+docker compose down
+```
+
+### Rebuild after code changes
+
+```bash
+docker compose up -d --build
+```
+
+> **Note**: `app/` and `celery_app/` are volume-mounted, so Python code changes in those directories take effect after restarting the relevant container — no rebuild required:
+>
+> ```bash
+> docker compose restart celery_worker_scrape   # after scraper changes
+> docker compose restart celery_worker_alert    # after alert task changes
+> docker compose restart flask                  # after API/template changes
+> ```
+
+### Access
+
+| URL | Service |
+|---|---|
+| http://localhost | Web UI (via Nginx, port 80) |
+| http://localhost:5000 | Flask direct |
+| http://localhost:5555 | Flower (Celery monitor) |
+| http://localhost:9500 | Elasticsearch |
+
+---
+
+## First-Time Setup
+
+### 1. Run database migrations
+
 ```bash
 docker compose exec flask alembic upgrade head
 ```
 
-2. Access the web UI at http://localhost:8080 and register an account
+### 2. Register an account
 
-3. Configure your first website:
-   - Add website with sitemap URL
-   - Configure CSS/XPath selectors for product fields
-   - Create tracking rules (keyword, brand, category)
-   - Add Discord webhook for alerts
-   - Set cron schedule for automatic crawling
+Open http://localhost:8081, click **Register**, and create your account.
 
-## API Endpoints
+### 3. Add a website
 
-### Authentication
-- `POST /auth/register` - Register new user
-- `POST /auth/login` - Login (returns access + refresh tokens)
-- `POST /auth/refresh` - Refresh access token
-- `GET /auth/me` - Get current user info
+Go to **Dashboard → Add Website**. Supported sites:
+
+| Site | Base URL |
+|---|---|
+| ASOS | `https://www.asos.com` |
+| Shop WSS | `https://www.shopwss.com` |
+| Champs Sports | `https://www.champssports.com` |
+
+After adding a site, set a **Discord webhook URL** on it for site-level notifications.
+
+### 4. Run your first crawl
+
+From the Dashboard, click **Crawl Now** on your website. This discovers products and populates the database. The crawl runs in the background — watch progress in the UI or via:
+
+```bash
+docker compose logs -f celery_worker_crawl
+```
+
+### 5. Browse products
+
+Once the crawl is done, go to **Products** to see discovered items with price, availability, and inventory.
+
+---
+
+## Usage
+
+### Crawling
+
+- **Manual crawl**: Dashboard → site card → **Crawl Now**
+- **Scheduled crawl**: Configure schedule (daily/weekly) per site in site settings
+- Crawl discovers products and saves them to the database with variants and availability
+
+### Product Search
+
+- Use the search bar on the Products page to filter by title, brand, or SKU
+- Filter by availability, gender, price range
+
+---
+
+## Tracked Products & Alerts
+
+### Tracking a product
+
+1. Go to **Products**, find a product, click **Track**
+2. Configure alert rules:
+   - **Price direction**: alert when price goes `above` or `below` a reference value
+   - **Size filter**: track only specific sizes (e.g. `US 10, US 11`) — leave blank to track all
+   - **Availability filter**: `InStock`, `OutOfStock`, or leave blank
+   - **Schedule**: how often to re-check (`hourly`, `daily`, `weekly`)
+   - **Priority**: controls which Celery queue handles the check
+   - **Discord webhook**: per-tracked-product webhook URL (overrides site-level webhook)
+3. Click **Save**
+
+### Alert types
+
+| Type | When fired |
+|---|---|
+| `price_drop` | Current price drops below your reference price |
+| `price_increase` | Current price rises above your reference price |
+| `availability_match` | A tracked size matches your availability filter |
+
+### Run Now
+
+From the Dashboard tracked products table, click **Run Now** to immediately trigger a scrape + alert evaluation for a specific tracked product without waiting for the schedule.
+
+### Discord embed format
+
+Alerts are sent as Discord embeds with:
+- **Title** = product name (clickable link to product page)
+- **Description** = alert type + size availability (when applicable)
+- Fields: Brand, Price, Size, Color, Status, Inventory, SKU
+- Thumbnail = product image
+
+### Cooldowns
+
+Each website has a configurable `alert_cooldown_minutes` (default: 60 min). The same alert for the same product + state won't be re-sent within the cooldown window.
+
+---
+
+## API Reference
+
+All endpoints are prefixed with `/api`. Authentication uses **JWT Bearer tokens**.
+
+```bash
+# Login
+curl -X POST http://localhost:5000/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email": "user@example.com", "password": "yourpassword"}'
+# Returns: { "access_token": "...", "refresh_token": "..." }
+```
+
+### Auth
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/api/auth/register` | Register new account |
+| POST | `/api/auth/login` | Login, get tokens |
+| POST | `/api/auth/refresh` | Refresh access token |
+| GET | `/api/auth/me` | Current user info |
 
 ### Websites
-- `GET /websites` - List user's websites
-- `POST /websites` - Create website
-- `GET /websites/<id>` - Get website details
-- `PUT /websites/<id>` - Update website
-- `DELETE /websites/<id>` - Delete website
-- `POST /websites/<id>/crawl` - Trigger manual crawl
 
-### Selectors
-- `GET /selectors/websites/<id>/selectors` - List selectors for website
-- `POST /selectors/websites/<id>/selectors` - Create selector
-- `DELETE /selectors/<id>` - Delete selector
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/websites` | List websites |
+| POST | `/api/websites` | Create website |
+| PUT | `/api/websites/<id>` | Update website |
+| DELETE | `/api/websites/<id>` | Delete website |
+| POST | `/api/websites/<id>/crawl` | Trigger crawl |
 
-### Tracking Rules
-- `GET /tracking/websites/<id>/rules` - List tracking rules
-- `POST /tracking/websites/<id>/rules` - Create tracking rule
-- `GET /tracking/rules/<id>` - Get tracking rule
-- `PUT /tracking/rules/<id>` - Update tracking rule
-- `DELETE /tracking/rules/<id>` - Delete tracking rule
+### Products
 
-### Discord Webhooks
-- `GET /webhooks/websites/<id>/webhooks` - List webhooks
-- `POST /webhooks/websites/<id>/webhooks` - Create webhook
-- `DELETE /webhooks/<id>` - Delete webhook
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/products` | List products (paginated, filterable) |
+| GET | `/api/products/<id>` | Get product + variants |
+
+Query params: `website_id`, `gender`, `search`, `availability`, `is_new`, `is_on_sale`, `min_price`, `max_price`, `sort_by`, `sort_order`, `page`, `per_page`
+
+### Tracked Products
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/tracked-products` | List tracked products |
+| POST | `/api/tracked-products` | Track a product |
+| PUT | `/api/tracked-products/<id>` | Update tracking settings |
+| DELETE | `/api/tracked-products/<id>` | Untrack |
+| POST | `/api/tracked-products/<id>/run` | Trigger immediate check |
 
 ### Alerts
-- `GET /alerts` - List user's alerts (paginated)
-- Query params: `alert_type`, `product_id`, `page`, `page_size`
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/alerts` | List alerts (paginated) |
 
 ### Search
-- `GET /search` - Search products (Elasticsearch)
-- Query params: `q`, `website_id`, `brand`, `min_price`, `max_price`, `availability`, `categories`, `page`, `page_size`
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/search` | Full-text search (Elasticsearch) |
+
+Query params: `q`, `website_id`, `brand`, `min_price`, `max_price`, `availability`, `page`, `per_page`
 
 ### Health
-- `GET /health` - Health check (database, Redis status)
 
-## Features
+| Method | Path | Description |
+|---|---|---|
+| GET | `/health` | Service health check |
 
-### Sitemap Parsing
-- Supports sitemap index and gzip compression
-- ETag and Last-Modified caching
-- URL normalization (removes tracking parameters)
-- Proxy support via BrightData
+---
 
-### Scraping Engine
-- **Fast mode**: HTTP requests with proxy rotation
-- **Heavy mode**: Playwright browser pool with context reuse
-- Configurable delays with randomization
-- CSS and XPath selector support
-- Post-processing: clean_price, extract_text, json_parse, etc.
-- Hash-based change detection (skips unchanged products)
+## Project Structure
 
-### Alert System
-- **Alert types**: new_match, price_drop, back_in_stock
-- **Matching rules**: keyword, brand, category
-- **Price thresholds**: absolute or percentage
-- **Cooldown**: prevents duplicate alerts
-- **Discord embeds**: rich notifications with product details
-- **Real-time**: WebSocket push to connected clients
-
-### Dynamic Scheduler
-- Reads cron schedules from database
-- Reloads every minute (no restart required)
-- Spreads load across workers
-- Per-website scheduling
-
-### Elasticsearch
-- Full-text search on title, brand, SKU
-- Filters: price range, availability, categories
-- User isolation
-- ILM policy: 30-day rollover, 90-day deletion
-
-## Environment Variables
-
-```env
-FLASK_ENV=development
-SECRET_KEY=<random-secret>
-JWT_SECRET_KEY=<random-jwt-secret>
-
-DATABASE_URL=postgresql://postgres:postgres@postgres:5432/product_tracker
-REDIS_URL=redis://redis:6379/0
-ELASTICSEARCH_URL=http://elasticsearch:9200
-
-CELERY_BROKER_URL=redis://redis:6379/0
-CELERY_RESULT_BACKEND=redis://redis:6379/1
-
-BRIGHTDATA_PROXY_HOST=
-BRIGHTDATA_PROXY_PORT=
-BRIGHTDATA_PROXY_USERNAME=
-BRIGHTDATA_PROXY_PASSWORD=
-
-SENTRY_DSN=
-
-CORS_ORIGINS=http://localhost:8080,http://localhost:5000
 ```
+product-tracker/
+├── app/
+│   ├── api/                  # Flask API blueprints
+│   │   ├── auth.py
+│   │   ├── products.py
+│   │   ├── tracked_products.py
+│   │   ├── alerts.py
+│   │   ├── websites.py
+│   │   ├── search.py
+│   │   └── ...
+│   ├── models/               # SQLAlchemy models
+│   │   ├── product.py
+│   │   ├── product_variant.py
+│   │   ├── product_snapshot.py
+│   │   ├── tracked_product.py
+│   │   ├── alert.py
+│   │   ├── website.py
+│   │   └── user.py
+│   ├── scraping/             # Site scrapers
+│   │   ├── asos_scraper.py
+│   │   ├── shopwss_scraper.py
+│   │   ├── champssports_scraper.py
+│   │   ├── scraper_factory.py
+│   │   └── base_scraper.py
+│   └── templates/            # Jinja2 + Alpine.js UI
+│       ├── dashboard.html
+│       ├── products.html
+│       └── ...
+├── celery_app/
+│   ├── tasks/
+│   │   ├── crawl_tasks.py         # Site discovery crawls
+│   │   ├── scrape_tasks.py        # Per-product scraping + snapshots
+│   │   ├── tracked_product_tasks.py  # Tracked product check chains
+│   │   ├── alert_tasks.py         # Alert evaluation + Discord sending
+│   │   ├── discovery_tasks.py     # Product upsert helpers
+│   │   └── index_tasks.py         # Elasticsearch indexing
+│   ├── celery.py              # Celery app + task routing
+│   └── beat_scheduler.py      # Dynamic periodic scheduler
+├── alembic/                   # DB migration scripts
+├── docker/
+│   ├── flask.Dockerfile
+│   └── worker.Dockerfile
+├── nginx/
+│   └── nginx.conf
+├── docker-compose.yml
+├── requirements.txt
+└── .env.example
+```
+
+---
+
+## Celery Workers & Queues
+
+| Worker | Queue | Purpose |
+|---|---|---|
+| `celery_worker_crawl` | `crawl_queue` | Crawl websites, discover products |
+| `celery_worker_scrape` | `scrape_queue` | Scrape individual product details/variants |
+| `celery_worker_alert` | `alert_queue` | Evaluate alert rules, send Discord notifications |
+| `celery_worker_index` | `index_queue` | Index products to Elasticsearch |
+| `celery_worker_urgent_now` | `urgent_now` | Immediate/manual tracked product checks |
+| `celery_worker_high_priority` | `high_priority` | High-priority scheduled checks |
+| `celery_worker_moderate_priority` | `moderate_priority` | Moderate-priority checks |
+| `celery_worker_normal_priority` | `normal_priority` | Normal-priority checks |
+| `celery_beat` | — | Periodic task scheduler |
+
+### Task chain for tracked product checks
+
+```
+trigger_tracked_product_now
+  └─► scrape_product          (scrape_queue)
+        └─► on_scrape_complete (alert_queue)
+              └─► evaluate_tracked_product_alerts (alert_queue)
+                    └─► send_discord_alert (alert_queue)
+```
+
+---
 
 ## Monitoring
 
-- **Flower**: http://localhost:5555 - Monitor Celery tasks, workers, queues
-- **Prometheus**: `/metrics` endpoint - Application metrics
-- **Logs**: JSON structured logging to stdout
-- **Sentry**: Error tracking (if DSN configured)
-
-## Scaling
-
-### Horizontal Scaling
-- Add more workers for specific queues:
+- **Flower** at http://localhost:5555 — real-time Celery task/worker/queue dashboard
+- **Worker logs**:
   ```bash
-  docker compose up --scale celery_worker_scrape=4
+  docker compose logs -f celery_worker_scrape celery_worker_alert
+  ```
+- **Flask logs**:
+  ```bash
+  docker compose logs -f flask
+  ```
+- **All services**:
+  ```bash
+  docker compose logs -f
   ```
 
-### Queue Priorities
-- `high_priority` - User-triggered crawls
-- `crawl_queue` - Scheduled crawls
-- `scrape_queue` - Product scraping
-- `alert_queue` - Alert sending
-- `index_queue` - Elasticsearch indexing
-
-### Database Optimization
-- Indexes on foreign keys, product URLs, timestamps
-- Partitioning ready for `product_snapshots` table (monthly)
-- Connection pooling configured
-
-## Development
-
-### Tech Stack
-- **Backend**: Flask 3.0, SQLAlchemy 2.0, Celery 5.3
-- **Frontend**: HTMX, Alpine.js, Tailwind CSS
-- **Auth**: Flask-JWT-Extended with bcrypt
-- **Validation**: Marshmallow schemas
-- **Rate Limiting**: Flask-Limiter
-- **WebSockets**: Flask-SocketIO with Redis pub/sub
-
-### Project Structure
-```
-product-tracker/
-├── app/                    # Flask application
-│   ├── api/               # API blueprints
-│   ├── models/            # SQLAlchemy models
-│   ├── schemas/           # Marshmallow schemas
-│   ├── services/          # Business logic
-│   ├── scraping/          # Scraping engine
-│   ├── search/            # Elasticsearch client
-│   └── templates/         # Jinja2 templates
-├── celery_app/            # Celery tasks
-│   ├── tasks/             # Task modules
-│   ├── celery.py          # Celery config
-│   └── beat_scheduler.py  # Dynamic scheduler
-├── docker/                # Dockerfiles
-├── alembic/               # Database migrations
-└── scrapy_project/        # (Reserved for future Scrapy integration)
-```
-
-## Production Deployment
-
-1. Generate secure secrets:
-   ```bash
-   python -c "import secrets; print(secrets.token_hex(32))"
-   ```
-
-2. Configure environment variables in `.env`
-
-3. Set up BrightData proxy (optional but recommended)
-
-4. Deploy with Docker Compose or Kubernetes
-
-5. Run migrations:
-   ```bash
-   alembic upgrade head
-   ```
-
-6. Configure Sentry DSN for error tracking
-
-7. Set up SSL/TLS with Let's Encrypt (update nginx.conf)
+---
 
 ## License
 

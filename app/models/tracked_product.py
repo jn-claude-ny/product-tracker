@@ -27,6 +27,9 @@ class TrackedProduct(db.Model):
     # Size filter (JSON array of sizes to track, null means all sizes)
     size_filter = db.Column(db.JSON, nullable=True)
 
+    # Availability filter ('InStock', 'OutOfStock', 'LowStock', or null for any)
+    availability_filter = db.Column(db.String(50), nullable=True)
+
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
@@ -64,6 +67,7 @@ class TrackedProduct(db.Model):
             'price_condition': self.price_condition,
             'price_threshold': float(self.price_threshold) if self.price_threshold else None,
             'size_filter': self.size_filter,
+            'availability_filter': self.availability_filter,
             'discord_webhook_url': self.discord_webhook_url,
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat(),

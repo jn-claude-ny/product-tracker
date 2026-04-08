@@ -171,62 +171,95 @@ def _compute_state_hash(rule_id: int, snapshot: ProductSnapshot) -> str:
 
 @celery.task(bind=True, max_retries=3)
 def evaluate_tracked_product_alerts(self, product_id, snapshot_id):
-    """Evaluate alerts for tracked products with price direction tracking."""
+    """Evaluate alerts for tracked products with price direction, availability, and variant/size tracking."""
     logger.info(f'Evaluating tracked product alerts for {product_id}, snapshot {snapshot_id}')
-    
+
     try:
         from app import create_app
         app = create_app()
-        
+
         with app.app_context():
             from app.models.tracked_product import TrackedProduct
-            
+            from app.models.product_variant import ProductVariant
+
             product = Product.query.get(product_id)
             if not product:
                 logger.error(f'Product {product_id} not found')
                 return {'status': 'error', 'message': 'Product not found'}
-            
+
             current_snapshot = ProductSnapshot.query.get(snapshot_id)
             if not current_snapshot:
                 logger.error(f'Snapshot {snapshot_id} not found')
                 return {'status': 'error', 'message': 'Snapshot not found'}
-            
-            # Get all tracked products for this product
+
             tracked_products = TrackedProduct.query.filter_by(product_id=product_id).all()
-            
             alerts_created = 0
-            
+
             for tracked in tracked_products:
-                alert_type = None
-                
-                # Check price direction tracking
+                triggered_alerts = []  # list of (alert_type, extra_context)
+
+                # --- Price direction check ---
                 if tracked.price_direction and tracked.price_reference and current_snapshot.price:
                     current_price = float(current_snapshot.price)
                     ref_price = float(tracked.price_reference)
-                    
                     if tracked.price_direction == 'above' and current_price > ref_price:
-                        alert_type = 'price_increase'
+                        logger.info(f'[TP {tracked.id}] Price rule TRIGGERED: {current_price} > {ref_price} (above)')
+                        triggered_alerts.append(('price_increase', {}))
                     elif tracked.price_direction == 'below' and current_price < ref_price:
-                        alert_type = 'price_drop'
-                
-                # Check availability
-                if not alert_type and tracked.availability_filter:
-                    current_avail = (current_snapshot.availability or '').lower()
-                    if tracked.availability_filter.lower() in current_avail:
-                        alert_type = 'availability_match'
-                
-                # Check size filter
-                if not alert_type and tracked.size_filter and current_snapshot.size_data:
-                    # Size-based alerting would require size-specific data in snapshot
-                    pass
-                
-                if alert_type:
-                    # Check cooldown
-                    if _is_tracked_product_in_cooldown(tracked, product, alert_type, current_snapshot):
+                        logger.info(f'[TP {tracked.id}] Price rule TRIGGERED: {current_price} < {ref_price} (below)')
+                        triggered_alerts.append(('price_drop', {}))
+                    else:
+                        logger.info(f'[TP {tracked.id}] Price rule NOT triggered: current={current_price}, ref={ref_price}, direction={tracked.price_direction}')
+
+                # --- Variant / size tracking ---
+                variants_to_check = []
+                all_variants = ProductVariant.query.filter_by(product_id=product_id).all()
+
+                if tracked.size_filter:
+                    variants_to_check = [v for v in all_variants if v.size and v.size in tracked.size_filter]
+                    logger.info(f'[TP {tracked.id}] Checking {len(variants_to_check)}/{len(all_variants)} variants matching size_filter={tracked.size_filter}')
+                else:
+                    variants_to_check = all_variants
+
+                for variant in variants_to_check:
+                    avail_str = 'In Stock' if variant.available else 'Out of Stock'
+                    logger.info(f'[TP {tracked.id}] Variant size={variant.size} available={variant.available} ({avail_str})')
+
+                    # Availability filter match
+                    if tracked.availability_filter:
+                        stock_state = (variant.stock_state or '').lower()
+                        avail_filter = tracked.availability_filter.lower()
+                        # Normalise: 'instock' matches True, 'outofstock' matches False
+                        filter_wants_in = 'instock' in avail_filter or avail_filter == 'in stock'
+                        filter_wants_out = 'outofstock' in avail_filter or avail_filter == 'out of stock'
+                        filter_wants_low = 'low' in avail_filter
+
+                        rule_result = False
+                        if filter_wants_in and variant.available is True:
+                            rule_result = True
+                        elif filter_wants_out and variant.available is False:
+                            rule_result = True
+                        elif filter_wants_low and 'low' in stock_state:
+                            rule_result = True
+
+                        logger.info(f'[TP {tracked.id}] Availability rule for size={variant.size}: filter={tracked.availability_filter} result={rule_result}')
+                        if rule_result:
+                            triggered_alerts.append(('availability_match', {
+                                'size': variant.size,
+                                'color': variant.color,
+                                'available': variant.available,
+                                'stock_state': variant.stock_state,
+                                'variant_price': float(variant.price) if variant.price else None,
+                            }))
+
+                # --- Emit an alert for each trigger ---
+                for alert_type, ctx in triggered_alerts:
+                    if _is_tracked_product_in_cooldown(tracked, product, alert_type, current_snapshot, ctx):
+                        logger.info(f'[TP {tracked.id}] Alert {alert_type} in cooldown, skipping')
                         continue
-                    
-                    state_hash = _compute_tracked_state_hash(tracked.id, current_snapshot)
-                    
+
+                    state_hash = _compute_tracked_state_hash(tracked.id, current_snapshot, ctx)
+
                     alert = Alert(
                         user_id=tracked.user_id,
                         product_id=product_id,
@@ -235,147 +268,184 @@ def evaluate_tracked_product_alerts(self, product_id, snapshot_id):
                     )
                     db.session.add(alert)
                     db.session.commit()
-                    
+
                     send_discord_alert.apply_async(
                         args=[alert.id],
+                        kwargs={'extra_context': ctx},
                         queue='alert_queue'
                     )
-                    
+
                     alerts_created += 1
-            
+                    logger.info(f'[TP {tracked.id}] Created alert {alert.id} type={alert_type} ctx={ctx}')
+
             return {
                 'status': 'success',
                 'alerts_created': alerts_created
             }
-            
+
     except Exception as e:
         logger.error(f'Error evaluating tracked product alerts: {e}')
         raise
 
 
-def _is_tracked_product_in_cooldown(tracked_product, product, alert_type, snapshot):
+def _is_tracked_product_in_cooldown(tracked_product, product, alert_type, snapshot, ctx=None):
     """Check if alert is in cooldown for tracked product."""
     from app.models.website import Website
     website = Website.query.get(product.website_id)
-    
-    state_hash = _compute_tracked_state_hash(tracked_product.id, snapshot)
+
+    state_hash = _compute_tracked_state_hash(tracked_product.id, snapshot, ctx)
     cooldown_minutes = website.alert_cooldown_minutes if website else 60
     cutoff_time = datetime.utcnow() - timedelta(minutes=cooldown_minutes)
-    
+
     existing_alert = Alert.query.filter(
         Alert.product_id == product.id,
         Alert.alert_type == alert_type,
         Alert.state_hash == state_hash,
         Alert.sent_at >= cutoff_time
     ).first()
-    
+
     return existing_alert is not None
 
 
-def _compute_tracked_state_hash(tracked_product_id, snapshot):
-    """Compute state hash for tracked product alert."""
-    hash_string = f"tp:{tracked_product_id}:{snapshot.price}:{snapshot.availability}"
+def _compute_tracked_state_hash(tracked_product_id, snapshot, ctx=None):
+    """Compute state hash for tracked product alert (includes size context when present)."""
+    size_key = (ctx or {}).get('size', '')
+    hash_string = f"tp:{tracked_product_id}:{snapshot.price}:{snapshot.availability}:{size_key}"
     return hashlib.sha256(hash_string.encode()).hexdigest()
 
 
 @celery.task(bind=True, max_retries=3)
-def send_discord_alert(self, alert_id):
-    logger.info(f'Sending Discord alert {alert_id}')
-    
+def send_discord_alert(self, alert_id, extra_context=None):
+    logger.info(f'Sending Discord alert {alert_id} ctx={extra_context}')
+
     try:
         from app import create_app
         app = create_app()
-        
+
         with app.app_context():
             alert = Alert.query.get(alert_id)
             if not alert:
                 logger.error(f'Alert {alert_id} not found')
                 return {'status': 'error', 'message': 'Alert not found'}
-            
+
             product = Product.query.get(alert.product_id)
             website = Website.query.get(product.website_id)
-            
+
             webhooks = DiscordWebhook.query.filter_by(
                 website_id=website.id,
                 is_active=True
             ).all()
-            
-            if not webhooks:
+
+            # Also check tracked product's directly stored webhook URL
+            from app.models.tracked_product import TrackedProduct
+            tracked = TrackedProduct.query.filter_by(
+                user_id=alert.user_id,
+                product_id=alert.product_id
+            ).first()
+            tracked_webhook_url = tracked.discord_webhook_url if tracked else None
+
+            # Collect all unique URLs to send to
+            webhook_urls = {w.webhook_url: f'webhook:{w.id}' for w in webhooks}
+            if tracked_webhook_url and tracked_webhook_url not in webhook_urls:
+                webhook_urls[tracked_webhook_url] = 'tracked_product'
+
+            if not webhook_urls:
                 logger.warning(f'No active webhooks for website {website.id}')
                 return {'status': 'success', 'webhooks_sent': 0}
-            
+
             latest_snapshot = ProductSnapshot.query.filter_by(
                 product_id=product.id
             ).order_by(ProductSnapshot.created_at.desc()).first()
-            
-            embed = _create_discord_embed(alert, product, latest_snapshot)
-            
+
+            embed = _create_discord_embed(alert, product, latest_snapshot, extra_context or {})
+
             sent_count = 0
-            for webhook in webhooks:
+            for url, label in webhook_urls.items():
                 try:
-                    _send_to_discord(webhook.webhook_url, embed)
+                    _send_to_discord(url, embed)
                     sent_count += 1
+                    logger.info(f'Sent Discord alert {alert_id} to {label}')
                 except Exception as e:
-                    logger.error(f'Failed to send to webhook {webhook.id}: {e}')
-            
+                    logger.error(f'Failed to send to {label}: {e}')
+
             _publish_realtime_alert(alert, product, latest_snapshot)
-            
+
             return {
                 'status': 'success',
                 'webhooks_sent': sent_count
             }
-            
+
     except Exception as e:
         logger.error(f'Error sending Discord alert: {e}')
         raise
 
 
-def _create_discord_embed(alert: Alert, product: Product, snapshot: ProductSnapshot) -> dict:
+def _create_discord_embed(alert: Alert, product: Product, snapshot: ProductSnapshot, ctx: dict = None) -> dict:
+    ctx = ctx or {}
     color_map = {
         'new_match': 0x00ff00,
         'price_drop': 0xff9900,
-        'back_in_stock': 0x0099ff
+        'price_increase': 0xf97316,
+        'back_in_stock': 0x0099ff,
+        'availability_match': 0x22c55e,
     }
-    
+
     title_map = {
         'new_match': '🆕 New Product Match',
         'price_drop': '💰 Price Drop',
-        'back_in_stock': '✅ Back in Stock'
+        'price_increase': '📈 Price Increase',
+        'back_in_stock': '✅ Back in Stock',
+        'availability_match': '📦 Availability Alert',
     }
-    
+
+    size_label = ctx.get('size')
+    color_label = ctx.get('color')
+
+    # Title = product name (becomes the clickable hyperlink in Discord)
+    embed_title = product.title or 'Unknown Product'
+
+    # Description = alert type badge + optional size availability line
+    desc_parts = [title_map.get(alert.alert_type, '🔔 Alert')]
+    if size_label:
+        avail_label = 'In Stock ✅' if ctx.get('available') else 'Out of Stock ❌'
+        desc_parts.append(f'Size **{size_label}** — {avail_label}')
+    description = '\n'.join(desc_parts)
+
     embed = {
-        'title': title_map.get(alert.alert_type, 'Alert'),
-        'description': product.title or 'No title',
+        'title': embed_title,
+        'description': description,
         'url': product.url,
         'color': color_map.get(alert.alert_type, 0x808080),
         'fields': [],
         'timestamp': datetime.utcnow().isoformat()
     }
-    
+
     if product.brand:
-        embed['fields'].append({
-            'name': 'Brand',
-            'value': product.brand,
-            'inline': True
-        })
-    
-    if snapshot.price:
-        embed['fields'].append({
-            'name': 'Price',
-            'value': f"{snapshot.currency or 'USD'} {snapshot.price}",
-            'inline': True
-        })
-    
-    if snapshot.availability:
-        embed['fields'].append({
-            'name': 'Availability',
-            'value': snapshot.availability,
-            'inline': True
-        })
-    
+        embed['fields'].append({'name': 'Brand', 'value': product.brand, 'inline': True})
+
+    # Size-level price overrides snapshot price when available
+    price_val = ctx.get('variant_price') or (float(snapshot.price) if snapshot and snapshot.price else None)
+    if price_val:
+        embed['fields'].append({'name': 'Price', 'value': f"{snapshot.currency or '$'} {price_val:.2f}", 'inline': True})
+
+    if size_label:
+        embed['fields'].append({'name': 'Size', 'value': size_label, 'inline': True})
+
+    if color_label:
+        embed['fields'].append({'name': 'Color', 'value': color_label, 'inline': True})
+
+    if not size_label and snapshot and snapshot.availability:
+        embed['fields'].append({'name': 'Status', 'value': snapshot.availability, 'inline': True})
+
+    if product.inventory_level is not None:
+        embed['fields'].append({'name': 'Inventory', 'value': f'{product.inventory_level} in stock', 'inline': True})
+
+    if product.sku:
+        embed['fields'].append({'name': 'SKU', 'value': product.sku, 'inline': True})
+
     if product.image:
         embed['thumbnail'] = {'url': product.image}
-    
+
     return embed
 
 

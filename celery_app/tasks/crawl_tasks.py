@@ -47,7 +47,7 @@ def crawl_website(self, website_id, force_full_crawl=False):
                     tasks.append(discover_products_task.s(website_id, gender))
                 
                 job = group(tasks)
-                job.apply_async()
+                job.apply_async(queue='scrape_queue')
                 
                 logger.info(f'Queued {len(tasks)} discovery tasks for website {website_id}')
                 

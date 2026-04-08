@@ -95,7 +95,7 @@ class BaseScraper(ABC):
             'gender': gender,
             'category': raw_data.get('category'),
             'color': raw_data.get('color') or raw_data.get('colour'),
-            'price_current': self._extract_price(raw_data.get('price')),
+            'price_current': self._extract_price(raw_data.get('price')) or raw_data.get('price_current'),
             'currency': raw_data.get('currency', 'USD'),
             'is_on_sale': raw_data.get('is_on_sale', False) or raw_data.get('isOnSale', False),
             'is_new': raw_data.get('is_new', False) or raw_data.get('isNew', False),

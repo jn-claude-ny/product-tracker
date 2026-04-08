@@ -39,11 +39,16 @@ def scrape_product(self, product_id, user_id=None):
                 logger.error(f'No scraper available for {website.base_url}')
                 return {'success': False, 'error': 'No scraper available for this website'}
             
-            # Extract SKU from URL slug (e.g. '/products/vn000d3hbka' -> 'vn000d3hbka')
-            sku = product.url.rstrip('/').split('/')[-1]
-            data = scraper.extract_product_details(sku)
+            # ChampsSports takes a full URL; other scrapers take the last URL segment as SKU
+            if 'champssports.com' in website.base_url.lower():
+                detail_key = product.url
+            else:
+                # Strip URL fragment (#colourWayId-... on ASOS) before extracting segment
+                clean_url = product.url.split('#')[0].rstrip('/')
+                detail_key = clean_url.split('/')[-1]
+            data = scraper.extract_product_details(detail_key)
             if not data:
-                logger.warning(f'No data returned for product {product_id} (sku={sku})')
+                logger.warning(f'No data returned for product {product_id} (key={detail_key})')
                 return {'success': False, 'error': 'Scrape failed'}
 
             # Update product-level fields only when present in response
@@ -85,6 +90,19 @@ def scrape_product(self, product_id, user_id=None):
             if data.get('variants'):
                 from celery_app.tasks.discovery_tasks import update_product_with_details
                 update_product_with_details(product, data)
+
+                # Derive product-level availability from variants when scraper didn't return it
+                if not data.get('availability'):
+                    variants = data['variants']
+                    any_in_stock = any(v.get('available') for v in variants)
+                    all_out = all(not v.get('available') for v in variants)
+                    total_inv = sum(v.get('inventoryLevel') or 0 for v in variants)
+                    product.available = any_in_stock
+                    product.availability = 'InStock' if any_in_stock else 'OutOfStock'
+                    if total_inv > 0:
+                        product.inventory_level = total_inv
+                    # Update snapshot availability too
+                    snapshot.availability = product.availability
 
             db.session.commit()
 

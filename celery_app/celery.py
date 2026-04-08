@@ -44,6 +44,7 @@ celery.conf.update(
         'celery_app.tasks.tracked_product_tasks.check_tracked_product_moderate': {'queue': 'moderate_priority'},
         'celery_app.tasks.tracked_product_tasks.check_tracked_product_normal': {'queue': 'normal_priority'},
         'celery_app.tasks.tracked_product_tasks.schedule_tracked_products_check': {'queue': 'urgent_now'},
+        'celery_app.tasks.tracked_product_tasks.on_scrape_complete': {'queue': 'alert_queue'},
     },
     beat_scheduler='celery_app.beat_scheduler:DynamicScheduler',
     beat_schedule={

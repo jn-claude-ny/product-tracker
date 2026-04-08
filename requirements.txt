@@ -18,7 +18,7 @@ flower==2.0.1
 
 httpx==0.25.2
 playwright==1.40.0
-zendriver==0.2.0
+zendriver==0.15.3
 scrapy==2.11.0
 lxml==4.9.3
 cssselect==1.2.0
