@@ -153,21 +153,13 @@ Open `http://localhost`, click **Register**, and create your account.
 
 ![Login](docs/screenshots/login.png)
 
-### 3. Add a website
+### 3. Configure Discord webhooks
 
-Go to **Dashboard → Add Website**. Supported sites:
-
-| Site | Base URL |
-|---|---|
-| ASOS | `https://www.asos.com` |
-| Shop WSS | `https://www.shopwss.com` |
-| Champs Sports | `https://www.champssports.com` |
-
-After adding a site, set a **Discord webhook URL** on it for site-level notifications.
+The three supported sites — **ASOS**, **Shop WSS**, and **Champs Sports** — are pre-configured in the app. You do not need to add them manually. On the Dashboard, click **Configure** on each site card to set a **Discord webhook URL** for site-level notifications.
 
 ### 4. Run your first crawl
 
-From the Dashboard, click **Update** on your website card. This discovers products and populates the database. The crawl runs in the background — watch progress on the dashboard or via:
+On the Dashboard, click **Update** on a site card. This discovers products and populates the database. The crawl runs in the background — watch progress on the dashboard or via:
 
 ```bash
 docker compose logs -f celery_worker_crawl
@@ -291,9 +283,7 @@ curl -X POST http://localhost:5000/api/auth/login \
 | Method | Path | Description |
 |---|---|---|
 | GET | `/api/websites` | List websites |
-| POST | `/api/websites` | Create website |
-| PUT | `/api/websites/<id>` | Update website |
-| DELETE | `/api/websites/<id>` | Delete website |
+| PUT | `/api/websites/<id>` | Update website settings (webhook, schedule, etc.) |
 | POST | `/api/websites/<id>/crawl` | Trigger crawl |
 
 ### Products

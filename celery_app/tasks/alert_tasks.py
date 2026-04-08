@@ -327,6 +327,7 @@ def evaluate_tracked_product_alerts(self, product_id, snapshot_id):
                                 'available': variant.available,
                                 'stock_state': variant.stock_state,
                                 'variant_price': float(variant.price) if variant.price else None,
+                                'inventory_level': variant.inventory_level,
                             }))
 
                 # --- Emit an alert for each trigger ---
@@ -555,8 +556,10 @@ def _create_discord_embed(alert: Alert, product: Product, snapshot: ProductSnaps
     if not size_label and snapshot and snapshot.availability:
         embed['fields'].append({'name': 'Status', 'value': snapshot.availability, 'inline': True})
 
-    if product.inventory_level is not None:
-        embed['fields'].append({'name': 'Inventory', 'value': f'{product.inventory_level} in stock', 'inline': True})
+    # Prefer variant-level inventory (passed in ctx) over product-level aggregate
+    inv = ctx.get('inventory_level') if ctx.get('inventory_level') is not None else product.inventory_level
+    if inv is not None:
+        embed['fields'].append({'name': 'Inventory', 'value': f'{inv} in stock', 'inline': True})
 
     if product.sku:
         embed['fields'].append({'name': 'SKU', 'value': product.sku, 'inline': True})

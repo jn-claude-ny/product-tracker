@@ -179,12 +179,12 @@
                                 <div class="flex items-center gap-1.5">
                                     <span class="text-xs px-2 py-1 rounded-full"
                                           :class="{
-                                              'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200': product.availability === 'InStock',
-                                              'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200': product.availability === 'OutOfStock',
-                                              'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200': product.availability === 'LowStock',
-                                              'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400': !product.availability
+                                              'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200': product.available === true && product.inventory_level != null && product.inventory_level < 50,
+                                              'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200': product.available === true && !(product.inventory_level != null && product.inventory_level < 50),
+                                              'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200': product.available === false,
+                                              'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400': product.available == null
                                           }"
-                                          x-text="product.availability || 'Unknown'"></span>
+                                          x-text="product.available === true ? (product.inventory_level != null && product.inventory_level < 50 ? 'LowStock' : 'InStock') : (product.available === false ? 'OutOfStock' : 'Unknown')"></span>
                                     <span x-show="product.inventory_level != null"
                                           class="text-xs text-gray-500 dark:text-gray-400"
                                           x-text="'(' + product.inventory_level + ' in stock)'"></span>
@@ -601,6 +601,7 @@
                     if (this.searchQuery) params.set('search', this.searchQuery);
                     if (this.websiteFilter) params.set('website_id', this.websiteFilter);
                     if (this.genderFilter) params.set('gender', this.genderFilter);
+                    if (this.availabilityFilter) params.set('availability', this.availabilityFilter);
                     if (this.activeFilters.includes('is_new')) params.set('is_new', 'true');
                     if (this.activeFilters.includes('is_on_sale')) params.set('is_on_sale', 'true');
 
@@ -658,13 +659,8 @@
             },
             
             filterProducts() {
-                let filtered = [...this.allProducts];
-
-                if (this.availabilityFilter && filtered.some(p => p.availability !== undefined && p.availability !== null)) {
-                    filtered = filtered.filter(p => p.availability === this.availabilityFilter);
-                }
-                
-                this.filteredProducts = filtered;
+                // Filtering is done server-side via the API; just assign here.
+                this.filteredProducts = [...this.allProducts];
             },
             
             toggleFilter(filter) {

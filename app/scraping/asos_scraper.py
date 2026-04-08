@@ -204,7 +204,11 @@ class AsosScraper(BaseScraper):
                 'imageUrl': f"https://{product.get('imageUrl', '').lstrip('//')}" if product.get('imageUrl') else None,
                 'image': f"https://{product.get('imageUrl', '').lstrip('//')}" if product.get('imageUrl') else None,
                 'price': current_price,
-                'gender': gender
+                'gender': gender,
+                # ASOS search API only surfaces actively listed products — assume in stock
+                # at discovery time; scrape tasks will refine per-variant availability later
+                'available': True,
+                'availability': 'InStock',
             }
             
         except Exception as e:

@@ -55,6 +55,14 @@ def get_products():
             )
         )
     
+    if availability:
+        if availability == 'InStock':
+            query = query.filter(Product.available == True)
+        elif availability == 'OutOfStock':
+            query = query.filter(Product.available == False)
+        elif availability == 'LowStock':
+            query = query.filter(Product.available == True, Product.inventory_level < 50, Product.inventory_level != None)
+
     if is_new is not None:
         query = query.filter(Product.is_new == is_new)
     
