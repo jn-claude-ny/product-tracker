@@ -9,7 +9,7 @@ class WebsiteService:
         default_websites = [
             {
                 'name': 'ASOS',
-                'base_url': 'https://www.asos.com',
+                'base_url': 'https://www.asos.com/',
                 'allowed_domains': ['asos.com'],
                 'sitemap_url': 'https://www.asos.com/sitemap.xml',
                 'use_playwright': False,
