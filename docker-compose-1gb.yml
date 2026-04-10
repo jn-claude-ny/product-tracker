@@ -43,15 +43,14 @@ services:
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
-      - "ES_JAVA_OPTS=-Xms64m -Xmx64m"
-      # Additional ES memory optimizations
-      - "bootstrap.memory_lock=true"
+      # Increase heap slightly so it doesn't choke, but keep it small
+      - "ES_JAVA_OPTS=-Xms128m -Xmx128m"
+      # Disable memory lock so it can use the Swap we created
+      - "bootstrap.memory_lock=false"
       - "cluster.routing.allocation.disk.threshold_enabled=false"
-    ulimits:
-      memlock:
-        soft: -1
-        hard: -1
-    mem_limit: 256m
+    # Remove ulimits (not needed if memory_lock is false)
+    # Increase mem_limit to give the container "breathing room" for the OS/JVM
+    mem_limit: 512m 
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
     ports:
