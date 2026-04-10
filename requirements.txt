@@ -17,6 +17,7 @@ redis==5.0.1
 flower==2.0.1
 
 httpx==0.25.2
+requests==2.31.0
 lxml==4.9.3
 
 elasticsearch==8.11.1

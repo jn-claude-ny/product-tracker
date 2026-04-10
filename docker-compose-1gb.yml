@@ -51,7 +51,7 @@ services:
       memlock:
         soft: -1
         hard: -1
-    mem_limit: 128m
+    mem_limit: 256m
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
     ports:
@@ -85,7 +85,7 @@ services:
       redis:
         condition: service_healthy
       elasticsearch:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 30s
