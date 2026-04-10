@@ -49,9 +49,7 @@ services:
     restart: unless-stopped
 
   flask:
-    build:
-      context: .
-      dockerfile: docker/flask.Dockerfile
+    image: jnclaudeny/product-tracker-flask:latest
     env_file:
       - .env
     environment:
@@ -98,9 +96,7 @@ services:
     restart: unless-stopped
 
   celery_worker_crawl:
-    build:
-      context: .
-      dockerfile: docker/worker.Dockerfile
+    image: jnclaudeny/product-tracker-worker:latest
     command: celery -A celery_app.celery worker -Q crawl_queue -c 2 --loglevel=info
     env_file:
       - .env
@@ -121,9 +117,7 @@ services:
     restart: unless-stopped
 
   celery_worker_scrape:
-    build:
-      context: .
-      dockerfile: docker/worker.Dockerfile
+    image: jnclaudeny/product-tracker-worker:latest
     command: celery -A celery_app.celery worker -Q scrape_queue --pool=solo --loglevel=info
     env_file:
       - .env
@@ -144,9 +138,7 @@ services:
     restart: unless-stopped
 
   celery_worker_alert:
-    build:
-      context: .
-      dockerfile: docker/worker.Dockerfile
+    image: jnclaudeny/product-tracker-worker:latest
     command: celery -A celery_app.celery worker -Q alert_queue -c 2 --loglevel=info
     env_file:
       - .env
@@ -167,9 +159,7 @@ services:
     restart: unless-stopped
 
   celery_worker_index:
-    build:
-      context: .
-      dockerfile: docker/worker.Dockerfile
+    image: jnclaudeny/product-tracker-worker:latest
     command: celery -A celery_app.celery worker -Q index_queue -c 2 --loglevel=info
     env_file:
       - .env
@@ -193,9 +183,7 @@ services:
 
   # Priority-based tracked product workers
   celery_worker_urgent_now:
-    build:
-      context: .
-      dockerfile: docker/worker.Dockerfile
+    image: jnclaudeny/product-tracker-worker:latest
     command: celery -A celery_app.celery worker -Q urgent_now -c 2 --loglevel=info --prefetch-multiplier=1
     env_file:
       - .env
@@ -216,9 +204,7 @@ services:
     restart: unless-stopped
 
   celery_worker_high_priority:
-    build:
-      context: .
-      dockerfile: docker/worker.Dockerfile
+    image: jnclaudeny/product-tracker-worker:latest
     command: celery -A celery_app.celery worker -Q high_priority -c 3 --loglevel=info
     env_file:
       - .env
@@ -239,9 +225,7 @@ services:
     restart: unless-stopped
 
   celery_worker_moderate_priority:
-    build:
-      context: .
-      dockerfile: docker/worker.Dockerfile
+    image: jnclaudeny/product-tracker-worker:latest
     command: celery -A celery_app.celery worker -Q moderate_priority -c 2 --loglevel=info
     env_file:
       - .env
@@ -262,9 +246,7 @@ services:
     restart: unless-stopped
 
   celery_worker_normal_priority:
-    build:
-      context: .
-      dockerfile: docker/worker.Dockerfile
+    image: jnclaudeny/product-tracker-worker:latest
     command: celery -A celery_app.celery worker -Q normal_priority -c 2 --loglevel=info
     env_file:
       - .env
@@ -285,10 +267,8 @@ services:
     restart: unless-stopped
 
   celery_beat:
-    build:
-      context: .
-      dockerfile: docker/worker.Dockerfile
-    command: celery -A celery_app.celery beat --loglevel=info
+    image: jnclaudeny/product-tracker-worker:latest
+    command: celery -A celery_app.celery beat --loglevel=info --scheduler celery_app.beat_scheduler.DynamicScheduler
     env_file:
       - .env
     environment:
@@ -308,9 +288,7 @@ services:
     restart: unless-stopped
 
   flower:
-    build:
-      context: .
-      dockerfile: docker/worker.Dockerfile
+    image: jnclaudeny/product-tracker-worker:latest
     command: celery -A celery_app.celery flower --port=5555
     env_file:
       - .env
