@@ -86,3 +86,19 @@ def delete_website(website_id):
         return '', 204
     except ValueError as e:
         return jsonify({'error': str(e)}), 404
+
+
+@bp.route('/seed', methods=['POST'])
+@jwt_required()
+def seed_websites():
+    """Seed default websites for the current user"""
+    user_id = int(get_jwt_identity())
+    try:
+        websites = WebsiteService.seed_default_websites(user_id)
+        schema = WebsiteSchema(many=True)
+        return jsonify({
+            'message': f'Seeded {len(websites)} default websites',
+            'websites': schema.dump(websites)
+        }), 201
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500

@@ -2,6 +2,7 @@ import bcrypt
 from flask_jwt_extended import create_access_token, create_refresh_token
 from app.models.user import User
 from app.extensions import db
+from app.services.website_service import WebsiteService
 
 
 class AuthService:
@@ -23,6 +24,10 @@ class AuthService:
         user = User(email=email, password_hash=password_hash)
         db.session.add(user)
         db.session.commit()
+        
+        # Seed default websites for new user
+        WebsiteService.seed_default_websites(user.id)
+        
         return user
 
     @staticmethod
