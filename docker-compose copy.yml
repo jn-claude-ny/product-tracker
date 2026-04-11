@@ -7,27 +7,38 @@ services:
       POSTGRES_DB: product_tracker
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      PGDATA: /var/lib/postgresql/data/pgdata
+      # PostgreSQL memory optimizations
       POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
       POSTGRES_HOST_AUTH_METHOD: trust
-    mem_limit: 256m
+      PGDATA: /var/lib/postgresql/data/pgdata  # Moves everything into a stable subfolder
     volumes:
       - postgres_data:/var/lib/postgresql/data
+
+    mem_limit: 512m
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
-    command: >
-      postgres 
-      -c shared_buffers=32MB 
-      -c synchronous_commit=on 
-      -c wal_level=minimal 
-      -c max_wal_size=256MB
+    # Reduce PostgreSQL memory usage
+    command: postgres -c shared_buffers=32MB -c max_wal_size=256MB -c min_wal_size=64MB -c wal_level=minimal -c max_wal_senders=0 -c synchronous_commit=on -c full_page_writes=on
 
   redis:
     image: redis:7-alpine
+    ports:
+      - "6379:6379"
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
+    # Minimal Redis config
     command: redis-server --maxmemory 32mb --maxmemory-policy allkeys-lru
 
   elasticsearch:
@@ -35,21 +46,56 @@ services:
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
+      # Increase heap slightly so it doesn't choke, but keep it small
       - "ES_JAVA_OPTS=-Xms128m -Xmx128m"
+      # Disable memory lock so it can use the Swap we created
+      - "bootstrap.memory_lock=false"
+      - "cluster.routing.allocation.disk.threshold_enabled=false"
+    # Remove ulimits (not needed if memory_lock is false)
+    # Increase mem_limit to give the container "breathing room" for the OS/JVM
     mem_limit: 512m 
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
+    ports:
+      - "9500:9200"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
     restart: unless-stopped
 
   flask:
     image: jnclaudeny/product-tracker-flask:latest
-    env_file: .env
-    depends_on:
-      - postgres
-      - redis
+    env_file:
+      - .env
+    environment:
+      - FLASK_ENV=production
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/product_tracker
+      - REDIS_URL=redis://redis:6379/0
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+      - CORS_ORIGINS=http://localhost,http://localhost:5000
+      # Flask memory optimizations
+      - PYTHONUNBUFFERED=1
     ports:
       - "5000:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     restart: unless-stopped
+    # Limit Flask memory
+    mem_limit: 256m
 
   nginx:
     image: nginx:alpine
