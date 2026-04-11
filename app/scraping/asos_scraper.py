@@ -24,18 +24,44 @@ class AsosScraper(BaseScraper):
     def __init__(self, website_id: int, base_url: str = "https://www.asos.com"):
         super().__init__(website_id, base_url)
         
+        # Add proxy support if available (for geoblocking)
+        self._setup_proxy()
+        
         # ASOS-specific headers - use browser-like headers to avoid 403
         self.session.headers.update({
-            'Accept': 'application/json',
-            'Accept-Language': 'en-US,en;q=0.9',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/json, text/plain, */*',
+            'Accept-Language': 'en-US,en;q=0.9,en-GB;q=0.8,en;q=0.7',
+            'Accept-Encoding': 'gzip, deflate, br',
             'Referer': 'https://www.asos.com/men/',
-            'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120"',
+            'Origin': 'https://www.asos.com',
+            'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
             'sec-ch-ua-mobile': '?0',
             'sec-ch-ua-platform': '"Windows"',
             'sec-fetch-dest': 'empty',
             'sec-fetch-mode': 'cors',
             'sec-fetch-site': 'same-origin'
         })
+    
+    def _setup_proxy(self):
+        """Setup proxy if environment variables are available"""
+        import os
+        
+        # Check for BrightData proxy environment variables
+        proxy_host = os.getenv('BRIGHTDATA_PROXY_HOST')
+        proxy_port = os.getenv('BRIGHTDATA_PROXY_PORT')
+        proxy_username = os.getenv('BRIGHTDATA_PROXY_USERNAME')
+        proxy_password = os.getenv('BRIGHTDATA_PROXY_PASSWORD')
+        
+        if proxy_host and proxy_port and proxy_username and proxy_password:
+            proxy_url = f"http://{proxy_username}:{proxy_password}@{proxy_host}:{proxy_port}"
+            self.session.proxies.update({
+                'http': proxy_url,
+                'https': proxy_url
+            })
+            logger.info(f"Using proxy: {proxy_host}:{proxy_port}")
+        else:
+            logger.info("No proxy configured, using direct connection")
     
     def discover_products(self, gender: str, limit: Optional[int] = None) -> List[Dict]:
         """
@@ -77,7 +103,7 @@ class AsosScraper(BaseScraper):
                     self.rate_limit(1.0)
                 
                 logger.info(f"Fetching ASOS page: offset={offset}, limit={page_size}")
-                response = self.session.get(url, params=params, timeout=60)
+                response = self.session.get(url, params=params, timeout=120)
                 response.raise_for_status()
                 
                 data = response.json()
