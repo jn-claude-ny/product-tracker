@@ -14,7 +14,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-    mem_limit: 256m
+    mem_limit: 512m
     ports:
       - "5432:5432"
     healthcheck:
@@ -155,5 +155,6 @@ services:
 
 volumes:
   postgres_data:
+    name: product_tracker_final_storage # Force a global name to prevent "disappearing"
   redis_data:
   elasticsearch_data:
