@@ -7,8 +7,14 @@ services:
       POSTGRES_DB: product_tracker
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
+      # PostgreSQL memory optimizations
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+      POSTGRES_HOST_AUTH_METHOD: trust
+      PGDATA: /var/lib/postgresql/data/pgdata  # Moves everything into a stable subfolder
     volumes:
       - postgres_data:/var/lib/postgresql/data
+
+    mem_limit: 256m
     ports:
       - "5432:5432"
     healthcheck:
@@ -17,6 +23,8 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    # Reduce PostgreSQL memory usage
+    command: postgres -c shared_buffers=32MB -c max_wal_size=256MB -c min_wal_size=64MB -c wal_level=minimal -c max_wal_senders=0 -c synchronous_commit=on -c full_page_writes=on
 
   redis:
     image: redis:7-alpine
@@ -30,13 +38,22 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    # Minimal Redis config
+    command: redis-server --maxmemory 32mb --maxmemory-policy allkeys-lru
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.11.1
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
-      - "ES_JAVA_OPTS=-Xms256m -Xmx256m"
+      # Increase heap slightly so it doesn't choke, but keep it small
+      - "ES_JAVA_OPTS=-Xms128m -Xmx128m"
+      # Disable memory lock so it can use the Swap we created
+      - "bootstrap.memory_lock=false"
+      - "cluster.routing.allocation.disk.threshold_enabled=false"
+    # Remove ulimits (not needed if memory_lock is false)
+    # Increase mem_limit to give the container "breathing room" for the OS/JVM
+    mem_limit: 512m 
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
     ports:
@@ -53,31 +70,32 @@ services:
     env_file:
       - .env
     environment:
-      - FLASK_ENV=development
+      - FLASK_ENV=production
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/product_tracker
       - REDIS_URL=redis://redis:6379/0
       - ELASTICSEARCH_URL=http://elasticsearch:9200
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/1
       - CORS_ORIGINS=http://localhost,http://localhost:5000
+      # Flask memory optimizations
+      - PYTHONUNBUFFERED=1
     ports:
       - "5000:5000"
-    volumes:
-      - ./app:/app/app
-      - ./celery_app:/app/celery_app
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
       elasticsearch:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
     restart: unless-stopped
+    # Limit Flask memory
+    mem_limit: 256m
 
   nginx:
     image: nginx:alpine
@@ -94,177 +112,7 @@ services:
       timeout: 10s
       retries: 3
     restart: unless-stopped
-
-  celery_worker_crawl:
-    image: jnclaudeny/product-tracker-worker:latest
-    command: celery -A celery_app.celery worker -Q crawl_queue -c 2 --loglevel=info
-    env_file:
-      - .env
-    environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/product_tracker
-      - REDIS_URL=redis://redis:6379/0
-      - ELASTICSEARCH_URL=http://elasticsearch:9200
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/1
-    volumes:
-      - ./app:/app/app
-      - ./celery_app:/app/celery_app
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    restart: unless-stopped
-
-  celery_worker_scrape:
-    image: jnclaudeny/product-tracker-worker:latest
-    command: celery -A celery_app.celery worker -Q scrape_queue --pool=solo --loglevel=info
-    env_file:
-      - .env
-    environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/product_tracker
-      - REDIS_URL=redis://redis:6379/0
-      - ELASTICSEARCH_URL=http://elasticsearch:9200
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/1
-    volumes:
-      - ./app:/app/app
-      - ./celery_app:/app/celery_app
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    restart: unless-stopped
-
-  celery_worker_alert:
-    image: jnclaudeny/product-tracker-worker:latest
-    command: celery -A celery_app.celery worker -Q alert_queue -c 2 --loglevel=info
-    env_file:
-      - .env
-    environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/product_tracker
-      - REDIS_URL=redis://redis:6379/0
-      - ELASTICSEARCH_URL=http://elasticsearch:9200
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/1
-    volumes:
-      - ./app:/app/app
-      - ./celery_app:/app/celery_app
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    restart: unless-stopped
-
-  celery_worker_index:
-    image: jnclaudeny/product-tracker-worker:latest
-    command: celery -A celery_app.celery worker -Q index_queue -c 2 --loglevel=info
-    env_file:
-      - .env
-    environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/product_tracker
-      - REDIS_URL=redis://redis:6379/0
-      - ELASTICSEARCH_URL=http://elasticsearch:9200
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/1
-    volumes:
-      - ./app:/app/app
-      - ./celery_app:/app/celery_app
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      elasticsearch:
-        condition: service_healthy
-    restart: unless-stopped
-
-  # Priority-based tracked product workers
-  celery_worker_urgent_now:
-    image: jnclaudeny/product-tracker-worker:latest
-    command: celery -A celery_app.celery worker -Q urgent_now -c 2 --loglevel=info --prefetch-multiplier=1
-    env_file:
-      - .env
-    environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/product_tracker
-      - REDIS_URL=redis://redis:6379/0
-      - ELASTICSEARCH_URL=http://elasticsearch:9200
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/1
-    volumes:
-      - ./app:/app/app
-      - ./celery_app:/app/celery_app
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    restart: unless-stopped
-
-  celery_worker_high_priority:
-    image: jnclaudeny/product-tracker-worker:latest
-    command: celery -A celery_app.celery worker -Q high_priority -c 3 --loglevel=info
-    env_file:
-      - .env
-    environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/product_tracker
-      - REDIS_URL=redis://redis:6379/0
-      - ELASTICSEARCH_URL=http://elasticsearch:9200
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/1
-    volumes:
-      - ./app:/app/app
-      - ./celery_app:/app/celery_app
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    restart: unless-stopped
-
-  celery_worker_moderate_priority:
-    image: jnclaudeny/product-tracker-worker:latest
-    command: celery -A celery_app.celery worker -Q moderate_priority -c 2 --loglevel=info
-    env_file:
-      - .env
-    environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/product_tracker
-      - REDIS_URL=redis://redis:6379/0
-      - ELASTICSEARCH_URL=http://elasticsearch:9200
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/1
-    volumes:
-      - ./app:/app/app
-      - ./celery_app:/app/celery_app
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    restart: unless-stopped
-
-  celery_worker_normal_priority:
-    image: jnclaudeny/product-tracker-worker:latest
-    command: celery -A celery_app.celery worker -Q normal_priority -c 2 --loglevel=info
-    env_file:
-      - .env
-    environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/product_tracker
-      - REDIS_URL=redis://redis:6379/0
-      - ELASTICSEARCH_URL=http://elasticsearch:9200
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/1
-    volumes:
-      - ./app:/app/app
-      - ./celery_app:/app/celery_app
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    restart: unless-stopped
+    mem_limit: 64m
 
   celery_beat:
     image: jnclaudeny/product-tracker-worker:latest
@@ -277,29 +125,33 @@ services:
       - ELASTICSEARCH_URL=http://elasticsearch:9200
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/1
-    volumes:
-      - ./app:/app/app
-      - ./celery_app:/app/celery_app
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     restart: unless-stopped
+    mem_limit: 128m
 
-  flower:
+  # Single lightweight worker for all tasks
+  celery_worker:
     image: jnclaudeny/product-tracker-worker:latest
-    command: celery -A celery_app.celery flower --port=5555
+    command: celery -A celery_app.celery worker -Q crawl_queue,scrape_queue,alert_queue,index_queue,urgent_now,high_priority,moderate_priority,normal_priority -c 1 --loglevel=info --prefetch-multiplier=1
     env_file:
       - .env
     environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/product_tracker
+      - REDIS_URL=redis://redis:6379/0
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/1
-    ports:
-      - "5555:5555"
     depends_on:
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     restart: unless-stopped
+    mem_limit: 256m
 
 volumes:
   postgres_data:
