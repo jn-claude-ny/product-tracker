@@ -162,4 +162,4 @@ class WebsiteUpdateSchema(Schema):
 
     cron_schedule = fields.Str(allow_none=True)
 
-    discord_webhook_url = fields.Str(validate=validate.Length(min=1, max=512), allow_none=True)
+    discord_webhook_url = fields.Str(validate=validate.Length(max=512), allow_none=True, load_default=None)

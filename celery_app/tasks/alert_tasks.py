@@ -467,6 +467,9 @@ def send_discord_alert(self, alert_id, extra_context=None):
 
             # Collect all unique URLs to send to
             webhook_urls = {w.webhook_url: f'webhook:{w.id}' for w in webhooks}
+            # Include website-level webhook URL saved via config modal
+            if website.discord_webhook_url and website.discord_webhook_url not in webhook_urls:
+                webhook_urls[website.discord_webhook_url] = 'website_config'
             if tracked_webhook_url and tracked_webhook_url not in webhook_urls:
                 webhook_urls[tracked_webhook_url] = 'tracked_product'
 
@@ -541,83 +544,79 @@ def _create_discord_embed(alert: Alert, product: Product, snapshot: ProductSnaps
     price_val = ctx.get('variant_price') or (float(snapshot.price) if snapshot and snapshot.price else None)
     currency = (snapshot.currency if snapshot else None) or 'USD'
     currency_sym = '$' if currency == 'USD' else currency
-
     price_str = f'{currency_sym}{price_val:.2f}' if price_val else 'N/A'
 
-    # Description: product name + brand + price in one line like the dashboard card
-    brand_str = f'*{product.brand}*  •  ' if product.brand else ''
-    desc = f'**[{product.title or "Unknown Product"}]({product.url})**\n{brand_str}{price_str}'
-
-    # Availability status badge
-    avail_str = snapshot.availability if snapshot and snapshot.availability else 'Unknown'
+    # Availability badge
     if ctx.get('available') is True:
-        avail_badge = '🟢 InStock'
+        avail_badge = '🟢  In Stock'
     elif ctx.get('available') is False:
-        avail_badge = '🔴 OutOfStock'
+        avail_badge = '🔴  Out of Stock'
     else:
-        avail_badge = f'⚪ {avail_str}'
+        raw_avail = snapshot.availability if snapshot and snapshot.availability else 'Unknown'
+        avail_badge = f'⚪  {raw_avail}'
+
+    # Description block — product name as link, brand, price, availability all in one readable block
+    lines = []
+    if product.brand:
+        lines.append(f'*{product.brand}*')
+    lines.append(f'**{price_str}**  ·  {avail_badge}')
+    if ctx.get('color'):
+        lines.append(f'🎨  {ctx["color"]}')
+    description = '\n'.join(lines)
 
     embed = {
-        'title': alert_title,
-        'description': desc,
+        'title': product.title or 'Unknown Product',
+        'description': description,
         'url': product.url,
         'color': color_map.get(alert.alert_type, 0x808080),
         'fields': [],
         'timestamp': datetime.utcnow().isoformat(),
+        'author': {
+            'name': alert_title,
+        },
+        'footer': {
+            'text': f'SKU: {product.sku}' if product.sku else 'Product Tracker',
+        },
     }
 
-    # Availability status field
-    embed['fields'].append({
-        'name': 'Status',
-        'value': avail_badge,
-        'inline': True,
-    })
+    # Size availability grid — two-column style, in-stock before out-of-stock
+    all_sizes = ctx.get('all_sizes')
+    if all_sizes:
+        in_stock  = [s for s in all_sizes if s.get('available')]
+        out_stock = [s for s in all_sizes if not s.get('available')]
 
-    # Price field
-    embed['fields'].append({
-        'name': 'Price',
-        'value': price_str,
-        'inline': True,
-    })
+        def fmt(s):
+            icon = '✅' if s.get('available') else '❌'
+            return f'`{s["size"]} {icon}`'
 
-    # Color field
-    if ctx.get('color'):
+        in_tokens  = [fmt(s) for s in in_stock]
+        out_tokens = [fmt(s) for s in out_stock]
+
+        if in_tokens:
+            chunks = [in_tokens[i:i+6] for i in range(0, len(in_tokens), 6)]
+            embed['fields'].append({
+                'name': f'✅  In Stock ({len(in_stock)})',
+                'value': '\n'.join(' '.join(c) for c in chunks),
+                'inline': True,
+            })
+        if out_tokens:
+            chunks = [out_tokens[i:i+6] for i in range(0, len(out_tokens), 6)]
+            embed['fields'].append({
+                'name': f'❌  Out of Stock ({len(out_stock)})',
+                'value': '\n'.join(' '.join(c) for c in chunks),
+                'inline': True,
+            })
+    elif not all_sizes and snapshot and snapshot.availability:
+        # No variant data — show product-level availability
         embed['fields'].append({
-            'name': 'Color',
-            'value': ctx['color'],
+            'name': 'Availability',
+            'value': avail_badge,
             'inline': True,
         })
 
-    # Size availability grid — full grid like the dashboard card
-    all_sizes = ctx.get('all_sizes')
-    if all_sizes:
-        size_tokens = []
-        for s in all_sizes:
-            icon = '✅' if s.get('available') else '❌'
-            size_tokens.append(f'`{s["size"]}{icon}`')
-        # Discord field value limit is 1024 chars — chunk into rows of 7
-        chunks = [size_tokens[i:i+7] for i in range(0, len(size_tokens), 7)]
-        size_grid = '\n'.join(' '.join(chunk) for chunk in chunks)
-        embed['fields'].append({
-            'name': 'Size Availability',
-            'value': size_grid or 'N/A',
-            'inline': False,
-        })
-
-    # Matched sizes (the ones that triggered alert)
-    matched_sizes = ctx.get('matched_sizes')
-    if matched_sizes:
-        embed['fields'].append({
-            'name': '🎯 Matched Sizes',
-            'value': '  '.join(f'`{s}`' for s in matched_sizes),
-            'inline': False,
-        })
-
-    if product.sku:
-        embed['fields'].append({'name': 'SKU', 'value': product.sku, 'inline': True})
-
+    # Large image at bottom of embed
     if product.image:
-        embed['thumbnail'] = {'url': product.image}
+        embed['image'] = {'url': product.image}
 
     return embed
 

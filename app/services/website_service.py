@@ -75,8 +75,12 @@ class WebsiteService:
     @staticmethod
     def update_website(website_id: int, user_id: int, **kwargs) -> Website:
         website = WebsiteService.get_website_by_id(website_id, user_id)
+        _nullable_str_fields = {'discord_webhook_url', 'cron_schedule', 'proxy_group', 'wait_selector'}
         for key, value in kwargs.items():
             if hasattr(website, key) and key not in ['id', 'user_id', 'created_at']:
+                # Coerce empty string to None for nullable URL/string fields
+                if key in _nullable_str_fields and value == '':
+                    value = None
                 setattr(website, key, value)
         db.session.commit()
         return website

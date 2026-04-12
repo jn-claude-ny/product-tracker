@@ -193,7 +193,10 @@ def run_tracked_product_now(tracked_product_id):
 
     try:
         from celery_app.tasks.tracked_product_tasks import trigger_tracked_product_now
-        result = trigger_tracked_product_now.delay(tracked_product.id)
+        result = trigger_tracked_product_now.apply_async(
+            args=[tracked_product.id],
+            queue='urgent_now'
+        )
         return jsonify({
             'success': True,
             'task_id': result.id,
