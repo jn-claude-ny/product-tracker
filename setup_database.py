@@ -40,14 +40,27 @@ def setup_database():
                 allowed_domains TEXT,
                 sitemap_url VARCHAR(500),
                 use_playwright BOOLEAN DEFAULT FALSE,
+                wait_selector VARCHAR(500),
                 scrape_delay_seconds DECIMAL(5,2) DEFAULT 2.0,
                 randomize_delay BOOLEAN DEFAULT TRUE,
+                proxy_group VARCHAR(100),
                 alert_cooldown_minutes INTEGER DEFAULT 60,
                 cron_schedule VARCHAR(100) DEFAULT '0 */6 * * * *',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 discord_webhook_url VARCHAR(500),
-                crawl_progress INTEGER DEFAULT 0
+                crawl_state VARCHAR(50) DEFAULT 'never_crawled',
+                crawl_progress INTEGER DEFAULT 0,
+                total_products_expected INTEGER DEFAULT 0,
+                products_discovered INTEGER DEFAULT 0,
+                products_processed INTEGER DEFAULT 0,
+                last_crawl_completed_at TIMESTAMP,
+                sitemap_etag VARCHAR(255),
+                sitemap_last_checked TIMESTAMP,
+                is_crawling BOOLEAN DEFAULT FALSE,
+                current_task_id VARCHAR(255),
+                last_error TEXT,
+                last_error_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """))
         
