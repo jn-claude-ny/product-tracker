@@ -4,17 +4,15 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: product_tracker
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: "$$tNg1OfbPMtKVBYru3u@ofV7"
       PGDATA: /var/lib/postgresql/data/pgdata
       POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
       POSTGRES_HOST_AUTH_METHOD: trust
     mem_limit: 256m
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+      - ./db_data:/var/lib/postgresql/data
     restart: unless-stopped
     command: >
       postgres 
@@ -51,7 +49,7 @@ services:
       - postgres
       - redis
     ports:
-      - "5000:5000"
+      - "127.0.0.1:5000:5000"
     restart: unless-stopped
 
   nginx:
@@ -112,6 +110,5 @@ services:
 
 volumes:
   postgres_data:
-    name: product_tracker_final_storage # Force a global name to prevent "disappearing"
   redis_data:
   elasticsearch_data:
