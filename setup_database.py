@@ -1,244 +1,40 @@
 #!/usr/bin/env python3
 """
-Direct database setup script - no Alembic needed
+Direct database setup script using SQLAlchemy db.create_all()
 """
 import os
 import sys
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
 
-# Database connection
-DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://postgres:postgres@postgres:5432/product_tracker')
+# Add app directory to path
+sys.path.insert(0, '/app')
 
 def setup_database():
-    """Create all tables directly without Alembic"""
-    engine = create_engine(DATABASE_URL)
+    """Create all tables using SQLAlchemy's db.create_all()"""
+    from app import create_app
+    from app.extensions import db
     
-    print("Setting up database...")
+    print("Setting up database with SQLAlchemy...")
     
-    # Create schema and tables
-    with engine.connect() as conn:
-        # Users table
-        conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS users (
-                id SERIAL PRIMARY KEY,
-                email VARCHAR(255) UNIQUE NOT NULL,
-                password_hash VARCHAR(255) NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                is_active BOOLEAN DEFAULT TRUE,
-                role VARCHAR(50) DEFAULT 'user'
-            );
-        """))
+    app = create_app()
+    
+    with app.app_context():
+        # Create all tables from models
+        db.create_all()
         
-        # Websites table
-        conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS websites (
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-                name VARCHAR(255) NOT NULL,
-                base_url VARCHAR(500) NOT NULL,
-                allowed_domains TEXT,
-                sitemap_url VARCHAR(500),
-                use_playwright BOOLEAN DEFAULT FALSE,
-                wait_selector VARCHAR(500),
-                scrape_delay_seconds DECIMAL(5,2) DEFAULT 2.0,
-                randomize_delay BOOLEAN DEFAULT TRUE,
-                proxy_group VARCHAR(100),
-                alert_cooldown_minutes INTEGER DEFAULT 60,
-                cron_schedule VARCHAR(100) DEFAULT '0 */6 * * * *',
-                discord_webhook_url VARCHAR(500),
-                crawl_state VARCHAR(50) DEFAULT 'never_crawled',
-                crawl_progress INTEGER DEFAULT 0,
-                total_products_expected INTEGER DEFAULT 0,
-                products_discovered INTEGER DEFAULT 0,
-                products_processed INTEGER DEFAULT 0,
-                last_crawl_completed_at TIMESTAMP,
-                sitemap_etag VARCHAR(255),
-                sitemap_last_checked TIMESTAMP,
-                is_crawling BOOLEAN DEFAULT FALSE,
-                current_task_id VARCHAR(255),
-                last_error TEXT,
-                last_error_at TIMESTAMP,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """))
-        
-        # Categories table
-        conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS categories (
-                id SERIAL PRIMARY KEY,
-                name VARCHAR(255) NOT NULL,
-                url VARCHAR(500),
-                selector VARCHAR(500),
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """))
-        
-        # Products table
-        conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS products (
-                id SERIAL PRIMARY KEY,
-                website_id INTEGER REFERENCES websites(id) ON DELETE CASCADE,
-                category_id INTEGER REFERENCES categories(id) ON DELETE CASCADE,
-                sku VARCHAR(255),
-                name VARCHAR(500),
-                title VARCHAR(500),
-                url VARCHAR(1000),
-                image_url VARCHAR(1000),
-                image VARCHAR(1000),
-                price DECIMAL(10,2),
-                original_price DECIMAL(10,2),
-                price_current DECIMAL(10,2),
-                price_previous DECIMAL(10,2),
-                sale_price DECIMAL(10,2),
-                currency VARCHAR(10),
-                description TEXT,
-                gender VARCHAR(20),
-                color VARCHAR(100),
-                size_range VARCHAR(100),
-                category VARCHAR(255),
-                categories TEXT,
-                brand VARCHAR(255),
-                is_new BOOLEAN DEFAULT FALSE,
-                is_on_sale BOOLEAN DEFAULT FALSE,
-                availability VARCHAR(50),
-                available BOOLEAN,
-                inventory_level INTEGER,
-                variants_data JSON,
-                first_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                last_price_change TIMESTAMP,
-                detail_last_fetched TIMESTAMP,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """))
-        
-        # Product variants table
-        conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS product_variants (
-                id SERIAL PRIMARY KEY,
-                product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
-                sku VARCHAR(255),
-                size VARCHAR(50),
-                color VARCHAR(100),
-                price DECIMAL(10,2),
-                availability VARCHAR(50),
-                available BOOLEAN,
-                inventory_level INTEGER,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """))
-        
-        # Tracked products table
-        conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS tracked_products (
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-                product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
-                priority VARCHAR(50) DEFAULT 'medium',
-                crawl_period_hours INTEGER DEFAULT 6,
-                price_direction VARCHAR(20),
-                price_reference DECIMAL(10,2),
-                price_condition VARCHAR(20),
-                price_threshold DECIMAL(10,2),
-                discord_webhook_url VARCHAR(500),
-                size_filter VARCHAR(100),
-                availability_filter VARCHAR(100),
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """))
-        
-        # Product snapshots table
-        conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS product_snapshots (
-                id SERIAL PRIMARY KEY,
-                product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
-                price DECIMAL(10,2),
-                availability VARCHAR(50),
-                available BOOLEAN,
-                inventory_level INTEGER,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """))
-        
-        # Alerts table
-        conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS alerts (
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-                product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
-                alert_type VARCHAR(50) NOT NULL,
-                message TEXT,
-                is_sent BOOLEAN DEFAULT FALSE,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """))
-        
-        # Other required tables
-        conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS selectors (
-                id SERIAL PRIMARY KEY,
-                name VARCHAR(255) NOT NULL,
-                css_selector VARCHAR(1000) NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """))
-        
-        conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS tracking_rules (
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-                website_id INTEGER REFERENCES websites(id) ON DELETE CASCADE,
-                name VARCHAR(255) NOT NULL,
-                conditions JSON,
-                actions JSON,
-                is_active BOOLEAN DEFAULT TRUE,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """))
-        
-        conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS discord_webhooks (
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-                url VARCHAR(500) NOT NULL,
-                is_active BOOLEAN DEFAULT TRUE,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """))
-        
-        # Create indexes
-        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);"))
-        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_websites_user_id ON websites(user_id);"))
-        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_products_website_id ON products(website_id);"))
-        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku);"))
-        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_product_variants_product_id ON product_variants(product_id);"))
-        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_product_variants_sku ON product_variants(sku);"))
-        
-        # Create alembic version table to mark migration as complete
-        conn.execute(text("""
+        # Mark alembic as complete
+        from sqlalchemy import text
+        db.session.execute(text("""
             CREATE TABLE IF NOT EXISTS alembic_version (
                 version_num VARCHAR(32) NOT NULL,
                 CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
             );
         """))
-        
-        # Mark migration as complete
-        conn.execute(text("INSERT INTO alembic_version (version_num) VALUES ('009') ON CONFLICT (version_num) DO NOTHING;"))
-        
-        conn.commit()
+        db.session.execute(text("INSERT INTO alembic_version (version_num) VALUES ('009') ON CONFLICT (version_num) DO NOTHING;"))
+        db.session.commit()
     
     print("✅ Database setup complete!")
-    print("📊 Tables created: users, websites, categories, products, product_variants, selectors, tracking_rules, discord_webhooks, product_snapshots, alerts")
-    print("🔗 Indexes created for performance")
+    print("📊 All tables created from SQLAlchemy models")
+    print("🔗 Indexes created automatically")
     print("🚀 Ready for user creation!")
 
 
