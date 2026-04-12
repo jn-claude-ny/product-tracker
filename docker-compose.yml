@@ -20,7 +20,8 @@ services:
       postgres 
       -c shared_buffers=32MB 
       -c synchronous_commit=on 
-      -c wal_level=minimal 
+      -c wal_level=minimal
+      -c max_wal_senders=0
       -c max_wal_size=256MB
 
   redis:
