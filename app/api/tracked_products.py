@@ -12,7 +12,8 @@ class TrackedProductSchema(Schema):
     id = fields.Int(dump_only=True)
     product_id = fields.Int(required=True)
     priority = fields.Str(validate=lambda x: x in ['now', 'urgent', 'high', 'moderate', 'normal'])
-    crawl_period_hours = fields.Int(validate=lambda x: x >= 1)
+    crawl_period_hours = fields.Int(validate=lambda x: x >= 1, allow_none=True)
+    schedule = fields.Str(validate=lambda x: x in ['hourly', 'every_6_hours', 'every_12_hours', 'daily', 'weekly'], allow_none=True)
     # New price direction tracking
     price_direction = fields.Str(validate=lambda x: x in ['above', 'below'], allow_none=True)
     price_reference = fields.Decimal(places=2, allow_none=True)
