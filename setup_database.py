@@ -83,23 +83,34 @@ def setup_database():
                 website_id INTEGER REFERENCES websites(id) ON DELETE CASCADE,
                 category_id INTEGER REFERENCES categories(id) ON DELETE CASCADE,
                 sku VARCHAR(255),
-                name VARCHAR(500) NOT NULL,
+                name VARCHAR(500),
+                title VARCHAR(500),
                 url VARCHAR(1000),
                 image_url VARCHAR(1000),
+                image VARCHAR(1000),
                 price DECIMAL(10,2),
                 original_price DECIMAL(10,2),
+                price_current DECIMAL(10,2),
+                price_previous DECIMAL(10,2),
+                sale_price DECIMAL(10,2),
+                currency VARCHAR(10),
                 description TEXT,
                 gender VARCHAR(20),
                 color VARCHAR(100),
                 size_range VARCHAR(100),
-                price_current DECIMAL(10,2),
-                sale_price DECIMAL(10,2),
+                category VARCHAR(255),
+                categories TEXT,
+                brand VARCHAR(255),
                 is_new BOOLEAN DEFAULT FALSE,
                 is_on_sale BOOLEAN DEFAULT FALSE,
                 availability VARCHAR(50),
-                variants_data JSON,
                 available BOOLEAN,
                 inventory_level INTEGER,
+                variants_data JSON,
+                first_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_price_change TIMESTAMP,
+                detail_last_fetched TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
@@ -119,6 +130,52 @@ def setup_database():
                 inventory_level INTEGER,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """))
+        
+        # Tracked products table
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS tracked_products (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
+                priority VARCHAR(50) DEFAULT 'medium',
+                crawl_period_hours INTEGER DEFAULT 6,
+                price_direction VARCHAR(20),
+                price_reference DECIMAL(10,2),
+                price_condition VARCHAR(20),
+                price_threshold DECIMAL(10,2),
+                discord_webhook_url VARCHAR(500),
+                size_filter VARCHAR(100),
+                availability_filter VARCHAR(100),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """))
+        
+        # Product snapshots table
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS product_snapshots (
+                id SERIAL PRIMARY KEY,
+                product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
+                price DECIMAL(10,2),
+                availability VARCHAR(50),
+                available BOOLEAN,
+                inventory_level INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """))
+        
+        # Alerts table
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS alerts (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
+                alert_type VARCHAR(50) NOT NULL,
+                message TEXT,
+                is_sent BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """))
         
@@ -155,30 +212,6 @@ def setup_database():
                 is_active BOOLEAN DEFAULT TRUE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """))
-        
-        conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS product_snapshots (
-                id SERIAL PRIMARY KEY,
-                product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
-                price DECIMAL(10,2),
-                availability VARCHAR(50),
-                available BOOLEAN,
-                inventory_level INTEGER,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """))
-        
-        conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS alerts (
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-                product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
-                alert_type VARCHAR(50) NOT NULL,
-                message TEXT,
-                is_sent BOOLEAN DEFAULT FALSE,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """))
         
