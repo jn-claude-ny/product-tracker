@@ -43,6 +43,8 @@ services:
 
   flask:
     image: jnclaudeny/product-tracker-flask:latest
+    volumes:
+      - .:/app
     env_file: .env
     depends_on:
       - postgres
