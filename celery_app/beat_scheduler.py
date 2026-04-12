@@ -11,8 +11,8 @@ logger = logging.getLogger(__name__)
 class DynamicScheduleEntry(ScheduleEntry):
     """Custom schedule entry that properly wraps our dynamic tasks."""
     
-    def __init__(self, name, task, schedule, args=None, kwargs=None, 
-                 last_run_at=None, total_run_count=0, options=None):
+    def __init__(self, name, task, schedule, args=None, kwargs=None,
+                 last_run_at=None, total_run_count=0, options=None, **extra):
         super().__init__(
             name=name,
             task=task,
@@ -21,7 +21,8 @@ class DynamicScheduleEntry(ScheduleEntry):
             kwargs=kwargs or {},
             last_run_at=last_run_at,
             total_run_count=total_run_count,
-            options=options or {}
+            options=options or {},
+            **extra
         )
 
 

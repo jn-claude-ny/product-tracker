@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from marshmallow import Schema, fields, ValidationError
+from marshmallow import Schema, fields, ValidationError, validate, EXCLUDE
 from app.models.tracked_product import TrackedProduct
 from app.models.product import Product
 from app.extensions import db
@@ -9,16 +9,24 @@ bp = Blueprint('tracked_products', __name__)
 
 
 class TrackedProductSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE  # ignore unknown fields like 'schedule'
+
     id = fields.Int(dump_only=True)
     product_id = fields.Int(required=True)
-    priority = fields.Str(validate=lambda x: x in ['now', 'urgent', 'high', 'moderate', 'normal'])
-    crawl_period_hours = fields.Int(validate=lambda x: x >= 1, allow_none=True)
-    schedule = fields.Str(validate=lambda x: x in ['hourly', 'every_6_hours', 'every_12_hours', 'daily', 'weekly'], allow_none=True)
+    priority = fields.Str(validate=validate.OneOf(['now', 'urgent', 'high', 'moderate', 'normal']))
+    crawl_period_hours = fields.Int(validate=validate.Range(min=1))
     # New price direction tracking
-    price_direction = fields.Str(validate=lambda x: x in ['above', 'below'], allow_none=True)
+    price_direction = fields.Str(
+        validate=lambda x: validate.OneOf(['above', 'below'])(x) if x is not None else True,
+        allow_none=True
+    )
     price_reference = fields.Decimal(places=2, allow_none=True)
     # Legacy price tracking
-    price_condition = fields.Str(validate=lambda x: x in ['greater_than', 'less_than', 'equal_to'], allow_none=True)
+    price_condition = fields.Str(
+        validate=lambda x: validate.OneOf(['greater_than', 'less_than', 'equal_to'])(x) if x is not None else True,
+        allow_none=True
+    )
     price_threshold = fields.Decimal(places=2, allow_none=True)
     size_filter = fields.List(fields.Str(), allow_none=True)
     availability_filter = fields.Str(allow_none=True)
