@@ -288,8 +288,7 @@ def evaluate_tracked_product_alerts(self, product_id, snapshot_id):
                     else:
                         logger.info(f'[TP {tracked.id}] Price rule NOT triggered: current={current_price}, ref={ref_price}, direction={tracked.price_direction}')
 
-                # --- Variant / size tracking ---
-                variants_to_check = []
+                # --- Variant / size tracking - collect ALL matching variants into ONE alert ---
                 all_variants = ProductVariant.query.filter_by(product_id=product_id).all()
 
                 if tracked.size_filter:
@@ -298,15 +297,14 @@ def evaluate_tracked_product_alerts(self, product_id, snapshot_id):
                 else:
                     variants_to_check = all_variants
 
+                matched_variants = []
                 for variant in variants_to_check:
                     avail_str = 'In Stock' if variant.available else 'Out of Stock'
                     logger.info(f'[TP {tracked.id}] Variant size={variant.size} available={variant.available} ({avail_str})')
 
-                    # Availability filter match
                     if tracked.availability_filter:
                         stock_state = (variant.stock_state or '').lower()
                         avail_filter = tracked.availability_filter.lower()
-                        # Normalise: 'instock' matches True, 'outofstock' matches False
                         filter_wants_in = 'instock' in avail_filter or avail_filter == 'in stock'
                         filter_wants_out = 'outofstock' in avail_filter or avail_filter == 'out of stock'
                         filter_wants_low = 'low' in avail_filter
@@ -321,14 +319,34 @@ def evaluate_tracked_product_alerts(self, product_id, snapshot_id):
 
                         logger.info(f'[TP {tracked.id}] Availability rule for size={variant.size}: filter={tracked.availability_filter} result={rule_result}')
                         if rule_result:
-                            triggered_alerts.append(('availability_match', {
-                                'size': variant.size,
-                                'color': variant.color,
-                                'available': variant.available,
-                                'stock_state': variant.stock_state,
-                                'variant_price': float(variant.price) if variant.price else None,
-                                'inventory_level': variant.inventory_level,
-                            }))
+                            matched_variants.append(variant)
+                    else:
+                        matched_variants.append(variant)
+
+                # Emit ONE combined alert for all matching variants
+                if matched_variants:
+                    # Build full size grid: all variants with availability status
+                    all_sizes = [{
+                        'size': v.size,
+                        'available': v.available,
+                        'stock_state': v.stock_state,
+                        'price': float(v.price) if v.price else None,
+                        'inventory_level': v.inventory_level,
+                        'matched': v in matched_variants,
+                    } for v in all_variants if v.size]
+                    all_sizes.sort(key=lambda x: float(x['size']) if x['size'] and x['size'].replace('.','').isdigit() else 999)
+
+                    matched_sizes = [v.size for v in matched_variants]
+                    first_matched = matched_variants[0]
+                    ctx = {
+                        'matched_sizes': matched_sizes,
+                        'all_sizes': all_sizes,
+                        'color': first_matched.color,
+                        'available': first_matched.available,
+                        'stock_state': first_matched.stock_state,
+                        'variant_price': float(first_matched.price) if first_matched.price else None,
+                    }
+                    triggered_alerts.append(('availability_match', ctx))
 
                 # --- Emit an alert for each trigger ---
                 for alert_type, ctx in triggered_alerts:
@@ -393,13 +411,12 @@ def _is_tracked_product_in_cooldown(tracked_product, product, alert_type, snapsh
 def _compute_tracked_state_hash(tracked_product_id, snapshot, ctx=None):
     """
     State hash for tracked-product alerts.
-    Includes the size key from ctx so that:
-      - size US 10 in stock and size US 11 in stock produce DIFFERENT hashes
-      - re-alerting on the same size at the same price is blocked by cooldown
-      - re-alerting on a DIFFERENT size is NOT blocked
-    Format: 'tp:<tracked_id>:<price>:<availability>:<size>'
+    Uses sorted matched_sizes so the same set of sizes in stock = same hash.
+    Format: 'tp:<tracked_id>:<price>:<availability>:<sorted_sizes>'
     """
-    size_key = (ctx or {}).get('size', '')
+    ctx = ctx or {}
+    matched_sizes = ctx.get('matched_sizes') or ([ctx['size']] if ctx.get('size') else [])
+    size_key = ','.join(sorted(matched_sizes))
     hash_string = f"tp:{tracked_product_id}:{snapshot.price}:{snapshot.availability}:{size_key}"
     return hashlib.sha256(hash_string.encode()).hexdigest()
 
@@ -486,80 +503,115 @@ def send_discord_alert(self, alert_id, extra_context=None):
 
 def _create_discord_embed(alert: Alert, product: Product, snapshot: ProductSnapshot, ctx: dict = None) -> dict:
     """
-    Build a Discord embed dict for the alert.
+    Build a Discord embed matching the dashboard tracked-product card design.
 
-    Structure:
-      title       = product name (clickable hyperlink via embed.url)
-      description = alert type emoji/label + optional size availability line
-      fields      = Brand, Price, Size, Color, Status, Inventory, SKU
-      thumbnail   = product image
-      color       = sidebar color by alert type
-
-    ctx (extra_context from variant alerts):
-      size, color, available, stock_state, variant_price
-    When ctx.size is present, the embed shows per-size availability instead of
-    the generic product-level status field.
+    Layout:
+      title        = alert type label (e.g. "📦 Availability Alert")
+      description  = product name (clickable) + brand + price
+      thumbnail    = product image
+      fields:
+        - Size Availability (full grid, ✅ in stock / ❌ out of stock)
+        - Matched Sizes     (highlighted sizes that triggered the alert)
+        - Color             (if present)
+        - SKU               (if present)
+      color        = sidebar color by alert type
+      footer       = website name + timestamp
     """
     ctx = ctx or {}
+
     color_map = {
-        'new_match': 0x00ff00,
-        'price_drop': 0xff9900,
-        'price_increase': 0xf97316,
-        'back_in_stock': 0x0099ff,
-        'availability_match': 0x22c55e,
+        'new_match':          0x22c55e,   # green
+        'price_drop':         0xf97316,   # orange
+        'price_increase':     0xef4444,   # red
+        'back_in_stock':      0x3b82f6,   # blue
+        'availability_match': 0x22c55e,   # green
     }
 
     title_map = {
-        'new_match': '🆕 New Product Match',
-        'price_drop': '💰 Price Drop',
-        'price_increase': '📈 Price Increase',
-        'back_in_stock': '✅ Back in Stock',
+        'new_match':          '🆕 New Product Match',
+        'price_drop':         '💰 Price Drop',
+        'price_increase':     '📈 Price Increase',
+        'back_in_stock':      '✅ Back in Stock',
         'availability_match': '📦 Availability Alert',
     }
 
-    size_label = ctx.get('size')
-    color_label = ctx.get('color')
+    alert_title = title_map.get(alert.alert_type, '🔔 Alert')
 
-    # Title = product name (becomes the clickable hyperlink in Discord)
-    embed_title = product.title or 'Unknown Product'
+    # Price display — prefer variant price, fall back to snapshot
+    price_val = ctx.get('variant_price') or (float(snapshot.price) if snapshot and snapshot.price else None)
+    currency = (snapshot.currency if snapshot else None) or 'USD'
+    currency_sym = '$' if currency == 'USD' else currency
 
-    # Description = alert type badge + optional size availability line
-    desc_parts = [title_map.get(alert.alert_type, '🔔 Alert')]
-    if size_label:
-        avail_label = 'In Stock ✅' if ctx.get('available') else 'Out of Stock ❌'
-        desc_parts.append(f'Size **{size_label}** — {avail_label}')
-    description = '\n'.join(desc_parts)
+    price_str = f'{currency_sym}{price_val:.2f}' if price_val else 'N/A'
+
+    # Description: product name + brand + price in one line like the dashboard card
+    brand_str = f'*{product.brand}*  •  ' if product.brand else ''
+    desc = f'**[{product.title or "Unknown Product"}]({product.url})**\n{brand_str}{price_str}'
+
+    # Availability status badge
+    avail_str = snapshot.availability if snapshot and snapshot.availability else 'Unknown'
+    if ctx.get('available') is True:
+        avail_badge = '🟢 InStock'
+    elif ctx.get('available') is False:
+        avail_badge = '🔴 OutOfStock'
+    else:
+        avail_badge = f'⚪ {avail_str}'
 
     embed = {
-        'title': embed_title,
-        'description': description,
+        'title': alert_title,
+        'description': desc,
         'url': product.url,
         'color': color_map.get(alert.alert_type, 0x808080),
         'fields': [],
-        'timestamp': datetime.utcnow().isoformat()
+        'timestamp': datetime.utcnow().isoformat(),
     }
 
-    if product.brand:
-        embed['fields'].append({'name': 'Brand', 'value': product.brand, 'inline': True})
+    # Availability status field
+    embed['fields'].append({
+        'name': 'Status',
+        'value': avail_badge,
+        'inline': True,
+    })
 
-    # Size-level price overrides snapshot price when available
-    price_val = ctx.get('variant_price') or (float(snapshot.price) if snapshot and snapshot.price else None)
-    if price_val:
-        embed['fields'].append({'name': 'Price', 'value': f"{snapshot.currency or '$'} {price_val:.2f}", 'inline': True})
+    # Price field
+    embed['fields'].append({
+        'name': 'Price',
+        'value': price_str,
+        'inline': True,
+    })
 
-    if size_label:
-        embed['fields'].append({'name': 'Size', 'value': size_label, 'inline': True})
+    # Color field
+    if ctx.get('color'):
+        embed['fields'].append({
+            'name': 'Color',
+            'value': ctx['color'],
+            'inline': True,
+        })
 
-    if color_label:
-        embed['fields'].append({'name': 'Color', 'value': color_label, 'inline': True})
+    # Size availability grid — full grid like the dashboard card
+    all_sizes = ctx.get('all_sizes')
+    if all_sizes:
+        size_tokens = []
+        for s in all_sizes:
+            icon = '✅' if s.get('available') else '❌'
+            size_tokens.append(f'`{s["size"]}{icon}`')
+        # Discord field value limit is 1024 chars — chunk into rows of 7
+        chunks = [size_tokens[i:i+7] for i in range(0, len(size_tokens), 7)]
+        size_grid = '\n'.join(' '.join(chunk) for chunk in chunks)
+        embed['fields'].append({
+            'name': 'Size Availability',
+            'value': size_grid or 'N/A',
+            'inline': False,
+        })
 
-    if not size_label and snapshot and snapshot.availability:
-        embed['fields'].append({'name': 'Status', 'value': snapshot.availability, 'inline': True})
-
-    # Prefer variant-level inventory (passed in ctx) over product-level aggregate
-    inv = ctx.get('inventory_level') if ctx.get('inventory_level') is not None else product.inventory_level
-    if inv is not None:
-        embed['fields'].append({'name': 'Inventory', 'value': f'{inv} in stock', 'inline': True})
+    # Matched sizes (the ones that triggered alert)
+    matched_sizes = ctx.get('matched_sizes')
+    if matched_sizes:
+        embed['fields'].append({
+            'name': '🎯 Matched Sizes',
+            'value': '  '.join(f'`{s}`' for s in matched_sizes),
+            'inline': False,
+        })
 
     if product.sku:
         embed['fields'].append({'name': 'SKU', 'value': product.sku, 'inline': True})
