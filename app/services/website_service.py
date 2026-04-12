@@ -5,7 +5,7 @@ from app.extensions import db
 class WebsiteService:
     @staticmethod
     def seed_default_websites(user_id: int):
-        """Seed default websites for a new user"""
+        """Seed default websites for a new user (only if they don't exist)"""
         default_websites = [
             {
                 'name': 'ASOS',
@@ -45,8 +45,13 @@ class WebsiteService:
         
         created_websites = []
         for website_data in default_websites:
-            website = WebsiteService.create_website(user_id, **website_data)
-            created_websites.append(website)
+            # Check if website already exists for this user
+            existing = Website.query.filter_by(user_id=user_id, name=website_data['name']).first()
+            if not existing:
+                website = WebsiteService.create_website(user_id, **website_data)
+                created_websites.append(website)
+            else:
+                created_websites.append(existing)
         
         return created_websites
     @staticmethod
