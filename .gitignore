@@ -285,3 +285,5 @@ app/scraping/champ_data/optimization_guide_model_store/9/E6DC4029A1E4B4C1/9F2164
 app/scraping/champ_data/optimization_guide_model_store/9/E6DC4029A1E4B4C1/9F21646093262F32/model.tflite
 app/scraping/champ_data/segmentation_platform/ukm_db
 app/scraping/champ_data/segmentation_platform/ukm_db-wal
+we are updating the way we crawl product.md
+db_data/

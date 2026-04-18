@@ -76,6 +76,8 @@ def create_app(config_class=Config):
 
     from app.api.products import bp as products_bp
 
+    from app.api.discord_orders import bp as discord_orders_bp
+
     app.register_blueprint(views_bp)
 
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
@@ -97,6 +99,8 @@ def create_app(config_class=Config):
     app.register_blueprint(tracked_products_bp, url_prefix='/api/tracked-products')
 
     app.register_blueprint(products_bp, url_prefix='/api/products')
+
+    app.register_blueprint(discord_orders_bp, url_prefix='/api/discord-orders')
 
     app.register_blueprint(crawl_bp, url_prefix='/api')
 

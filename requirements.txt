@@ -34,3 +34,8 @@ sentry-sdk[flask]==1.39.2
 python-dotenv==1.0.0
 gunicorn==21.2.0
 gevent==23.9.1
+
+# Discord bot
+discord.py==2.3.2
+asyncpg==0.29.0
+redis[hiredis]>=5.0.1

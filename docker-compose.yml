@@ -120,6 +120,27 @@ services:
     restart: unless-stopped
     mem_limit: 256m
 
+  discord_bot:
+    build:
+      context: .
+      dockerfile: docker/discord_bot.Dockerfile
+    volumes:
+      - .:/app
+    env_file: .env
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
+      - DISCORD_ADMIN_CHANNEL_ID=${DISCORD_ADMIN_CHANNEL_ID}
+      - DISCORD_GUILD_ID=${DISCORD_GUILD_ID}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    mem_limit: 128m
+
 volumes:
   postgres_data:
   redis_data:

@@ -9,6 +9,9 @@ from app.models.product_snapshot import ProductSnapshot
 from app.models.alert import Alert
 from app.models.tracked_product import TrackedProduct
 from app.models.product_variant import ProductVariant
+from app.models.discord_pending_user import DiscordPendingUser
+from app.models.user_discord_link import UserDiscordLink
+from app.models.discord_order import DiscordOrder
 
 __all__ = [
     'User',
@@ -21,5 +24,8 @@ __all__ = [
     'ProductSnapshot',
     'Alert',
     'TrackedProduct',
-    'ProductVariant'
+    'ProductVariant',
+    'DiscordPendingUser',
+    'UserDiscordLink',
+    'DiscordOrder',
 ]
